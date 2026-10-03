@@ -37,6 +37,13 @@ jobs:
         run: make -C nes
       - name: Check ROM size
         run: test "$(stat -c %s nes/build/nes-sdr.nes)" -eq 40976
+      - name: Check NES-SDR PRG signature
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          rom = Path("nes/build/nes-sdr.nes").read_bytes()
+          assert rom[32768:32776] == b"NES-SDR1"
+          PY
       - name: Render UI preview
         run: |
           python3 tools/render_preview.py \
