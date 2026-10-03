@@ -115,11 +115,27 @@ def main() -> None:
     )
     replace_once(
         cmake,
+        'option(SAMPLE_RATE_PROBE "Build volatile hardware sample-rate diagnostics (never package)" OFF)\n',
+        'option(SAMPLE_RATE_PROBE "Build volatile hardware sample-rate diagnostics (never package)" OFF)\n'
+        'option(ESP_SDR_EMBEDDED "Build ESP-SDR as a component inside another ESP-IDF app" OFF)\n',
+    )
+    replace_once(
+        cmake,
         'idf_component_register(SRCS "${receiver}" ${sources}\n'
         '    LDFRAGMENTS ${fragments}\n',
         'idf_component_register(SRCS "${receiver}" ${sources}\n'
         '    INCLUDE_DIRS "."\n'
         '    LDFRAGMENTS ${fragments}\n',
+    )
+    replace_once(
+        cmake,
+        'target_link_options(${COMPONENT_LIB} INTERFACE\n'
+        '    "-T${CMAKE_CURRENT_LIST_DIR}/${target_dir}/sram_guard.ld")\n',
+        'if(ESP_SDR_EMBEDDED)\n'
+        '    target_compile_definitions(${COMPONENT_LIB} PRIVATE ESP_SDR_EMBEDDED=1)\n'
+        'endif()\n'
+        'target_link_options(${COMPONENT_LIB} INTERFACE\n'
+        '    "-T${CMAKE_CURRENT_LIST_DIR}/${target_dir}/sram_guard.ld")\n',
     )
 
     local_h.write_text(
@@ -174,6 +190,18 @@ def main() -> None:
         receiver,
         'static bool ring_command(const char *line) {\n',
         helper + 'static bool ring_command(const char *line) {\n',
+    )
+
+    replace_once(
+        receiver,
+        'void app_main(void) {\n',
+        '#ifndef ESP_SDR_EMBEDDED\nvoid app_main(void) {\n',
+    )
+    receiver_text = receiver.read_text()
+    if not receiver_text.endswith('}\n'):
+        raise RuntimeError(f"{receiver}: expected app_main closing brace at EOF")
+    receiver.write_text(
+        receiver_text + '#endif /* ESP_SDR_EMBEDDED */\n'
     )
 
     print("ESP-SDR NES-SDR integration transforms applied")
