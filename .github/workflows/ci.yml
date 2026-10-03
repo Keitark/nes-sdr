@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python renderer tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Compile C renderer
+        run: cc -std=c11 -Wall -Wextra -Werror -Ifirmware/include -c firmware/src/nes_sdr_frame.c -o /tmp/nes_sdr_frame.o
+
+  nes-rom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cc65
+        run: sudo apt-get update && sudo apt-get install -y cc65
+      - name: Build NROM image
+        run: make -C nes
+      - name: Check ROM size
+        run: test "$(stat -c %s nes/build/nes-sdr.nes)" -eq 40976
