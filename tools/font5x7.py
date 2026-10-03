@@ -6,6 +6,8 @@ the 5-pixel glyph in an 8x8 NES background tile.
 
 FONT_FIRST_TILE = 193
 BLANK_TILE = 192
+AXIS_TILE = 236
+TICK_TILE = 237
 
 GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-.:/+<>"
 
@@ -79,3 +81,16 @@ def install_font(chr_data: bytearray) -> None:
         tile = FONT_FIRST_TILE + i
         base = tile * 16
         chr_data[base:base + 16] = glyph_tile(ch)
+
+    # Static graph-axis primitives. These live outside the dynamic graph range.
+    axis = bytearray(16)
+    axis[0] = 0xFF
+    base = AXIS_TILE * 16
+    chr_data[base:base + 16] = axis
+
+    tick = bytearray(axis)
+    tick[1] = 0x18
+    tick[2] = 0x18
+    tick[3] = 0x18
+    base = TICK_TILE * 16
+    chr_data[base:base + 16] = tick
