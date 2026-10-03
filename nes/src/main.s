@@ -142,6 +142,11 @@ palette:
 ui_nametable:
 .incbin "build/nametable.bin"
 
+.segment "IDENT"
+.byte "NES-SDR1"
+.byte $01                 ; identity format version
+.byte $00                 ; reserved
+
 .segment "VECTORS"
 .word nmi
 .word reset
