@@ -46,6 +46,7 @@ int main(void)
     assert(view.bin_count == N);
 
     uint8_t chr[NES_SDR_CHR_BYTES];
+    memset(chr, 0x5a, sizeof(chr));
     assert(nes_sdr_spc1_to_chr(frame, sizeof(frame), chr));
 
     int nonzero = 0;
@@ -53,6 +54,11 @@ int main(void)
         nonzero |= chr[i] != 0;
     }
     assert(nonzero);
+
+    /* Static UI/font region must not be touched by a live spectrum update. */
+    for (size_t i = NES_SDR_GRAPH_BYTES; i < sizeof(chr); ++i) {
+        assert(chr[i] == 0x5a);
+    }
 
     frame[0] = 'X';
     assert(!nes_sdr_spc1_parse(frame, sizeof(frame), &view));
