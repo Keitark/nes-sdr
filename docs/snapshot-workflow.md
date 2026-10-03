@@ -1,6 +1,15 @@
-# Zero-mod snapshot refresh workflow
+# Zero-mod snapshot fallback
 
-The useful no-hardware-modification mode is not limited to one image per power cycle.
+NES-SDR's primary architecture is now the no-reset live-refresh design described
+in [live-refresh.md](live-refresh.md).
+
+This document keeps the simpler **capture -> rewrite -> RESET** flow as a
+bring-up fallback.
+
+## Why keep a fallback mode?
+
+Before relying on permanent 2A03 internal-RAM parking, it is useful to prove the
+RF-to-CHR path independently.
 
 FC ROM Vomitter already knows how to:
 
@@ -8,90 +17,47 @@ FC ROM Vomitter already knows how to:
 - let the ESP32 write and verify SRAM;
 - return the SRAMs to the console.
 
-NES-SDR can intentionally use that behavior as a **snapshot refresh** operation.
-
-## User flow
+So the fallback flow is:
 
 ```text
-Famicom showing spectrum N
-          |
-          | press ESP BOOT / capture button
-          v
-ESP32 asserts safe LOAD topology
-          |
-          | Famicom CPU may stop executing useful code
-          | but is electrically isolated from SRAM
-          v
-ESP32 captures RF
-          |
-          v
-FFT -> SPC1 bins -> 31 bars -> CHR
-          |
-          v
-rewrite / verify PRG + CHR SRAM
-          |
-          v
-restore RUN topology
-          |
-          v
-READY LED
-          |
-          | press Famicom RESET
-          v
-Famicom shows spectrum N+1
+capture RF
+   |
+   v
+FFT -> SPC1 -> graph CHR
+   |
+   v
+rewrite normal NROM image / SRAM
+   |
+   v
+restore RUN
+   |
+   v
+press Famicom RESET
+   |
+   v
+display new snapshot
 ```
 
-This deliberately accepts that the 2A03 will not keep running normally during the SRAM rewrite. We do not need it to. After RUN ownership is restored, the console RESET vector is valid again.
+This mode is slower and interactive, but it is extremely useful while debugging
+the first RF integration because it does not depend on live ownership cycling.
 
-## Why this is preferable to clever timing
+## When to use it
 
-The released board's bus-safety design stays intact:
+Use snapshot fallback when:
 
-- no simultaneous console/ESP address drive;
-- no simultaneous console/ESP data drive;
-- no rewired buffer enables;
-- no dependence on exact PPU timing;
-- no blind one-second LOAD pulse while the CPU happens to be executing cartridge code.
+- validating the first real ESP-SDR spectrum;
+- checking the graph renderer;
+- debugging SRAM contents;
+- verifying frequency-axis orientation;
+- diagnosing a live-refresh failure.
 
-It is slower and requires a RESET press, but it is an excellent first real-hardware SDR mode.
+Once the internal-RAM parking and CHR-only refresh tests pass, live mode should
+be the normal path.
 
-## Intended firmware state machine
+## Important difference from live mode
 
-```text
-DISPLAYING
-   |
-   | capture requested
-   v
-ISOLATE
-   |
-   v
-RF_CAPTURE
-   |
-   v
-FFT
-   |
-   v
-RENDER_CHR
-   |
-   v
-SRAM_WRITE_VERIFY
-   |
-   v
-EXPOSE_RUN
-   |
-   v
-WAIT_FOR_USER_RESET
-```
+Snapshot fallback may rewrite both PRG and CHR and expects a user RESET
+afterward.
 
-The existing FC ROM Vomitter blue READY LED can naturally indicate the final state.
-
-## Future ergonomics
-
-Without modifying cartridge hardware, capture can be requested through any input already available to the ESP32, for example:
-
-- the module/board BOOT button;
-- USB command;
-- web UI;
-- periodic capture when the console is known not to need continuous execution.
-
-The supported baseline should remain explicit: **capture, rewrite, then press RESET**.
+Live mode writes only the 3072-byte graph region of CHR and should not require
+RESET.
