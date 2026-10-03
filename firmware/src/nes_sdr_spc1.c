@@ -61,8 +61,8 @@ bool nes_sdr_spc1_parse(const uint8_t *frame, size_t length,
     return true;
 }
 
-bool nes_sdr_spc1_to_chr(const uint8_t *frame, size_t length,
-                         uint8_t chr[NES_SDR_CHR_BYTES])
+bool nes_sdr_spc1_to_graph(const uint8_t *frame, size_t length,
+                           uint8_t graph[NES_SDR_GRAPH_BYTES])
 {
     nes_sdr_spc1_view_t view;
     uint8_t heights[NES_SDR_COLUMNS];
@@ -72,6 +72,12 @@ bool nes_sdr_spc1_to_chr(const uint8_t *frame, size_t length,
     }
 
     nes_sdr_reduce_bins_u8(view.bins, view.bin_count, heights);
-    nes_sdr_render_graph(heights, chr);
+    nes_sdr_render_graph(heights, graph);
     return true;
+}
+
+bool nes_sdr_spc1_to_chr(const uint8_t *frame, size_t length,
+                         uint8_t chr[NES_SDR_CHR_BYTES])
+{
+    return nes_sdr_spc1_to_graph(frame, length, chr);
 }
