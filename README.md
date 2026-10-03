@@ -106,6 +106,8 @@ See [docs/live-refresh.md](docs/live-refresh.md).
 
 ## Screen layout
 
+![NES-SDR UI preview](docs/images/ui-preview.png)
+
 The current UI reserves the first 192 CHR tiles for the graph and the remaining tiles for a fixed 5x7 instrument-style font.
 
 ```text
