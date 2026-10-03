@@ -15,6 +15,7 @@ from render_mock import (  # noqa: E402
     GRAPH_BYTES,
     HEIGHT,
     reduce_bins_u8,
+    reduce_fft_u8,
     render_graph,
 )
 
@@ -43,6 +44,11 @@ class RendererParityTests(unittest.TestCase):
             ctypes.c_size_t,
             ctypes.POINTER(ctypes.c_uint8),
         ]
+        cls.lib.nes_sdr_reduce_fft_u8.argtypes = [
+            ctypes.POINTER(ctypes.c_uint8),
+            ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_uint8),
+        ]
         cls.lib.nes_sdr_render_graph.argtypes = [
             ctypes.POINTER(ctypes.c_uint8),
             ctypes.POINTER(ctypes.c_uint8),
@@ -56,6 +62,12 @@ class RendererParityTests(unittest.TestCase):
         src = (ctypes.c_uint8 * len(bins))(*bins)
         dst = (ctypes.c_uint8 * COLUMNS)()
         self.lib.nes_sdr_reduce_bins_u8(src, len(bins), dst)
+        return list(dst)
+
+    def c_reduce_fft(self, bins: bytes) -> list[int]:
+        src = (ctypes.c_uint8 * len(bins))(*bins)
+        dst = (ctypes.c_uint8 * COLUMNS)()
+        self.lib.nes_sdr_reduce_fft_u8(src, len(bins), dst)
         return list(dst)
 
     def c_render(self, heights: list[int], fill: int = 0x5A) -> bytes:
@@ -75,6 +87,22 @@ class RendererParityTests(unittest.TestCase):
         for bins in fixtures:
             with self.subTest(n=len(bins)):
                 self.assertEqual(self.c_reduce(bins), reduce_bins_u8(bins))
+
+    def test_fft_shift_matches_python_reference(self):
+        fixtures = [
+            bytes([255] + [0] * 255),
+            bytes((255 if i == 128 else 0) for i in range(256)),
+            bytes((i * 53 + 7) & 0xFF for i in range(512)),
+        ]
+        for bins in fixtures:
+            with self.subTest(n=len(bins)):
+                self.assertEqual(self.c_reduce_fft(bins), reduce_fft_u8(bins))
+
+    def test_dc_moves_to_center_columns(self):
+        bins = bytes([255] + [0] * 255)
+        heights = self.c_reduce_fft(bins)
+        peak = max(range(COLUMNS), key=heights.__getitem__)
+        self.assertIn(peak, (COLUMNS // 2 - 1, COLUMNS // 2))
 
     def test_graph_matches_python_reference(self):
         fixtures = [
