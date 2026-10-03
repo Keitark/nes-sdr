@@ -1,5 +1,7 @@
 # NES-SDR
 
+[![CI](https://github.com/Keitark/nes-sdr/actions/workflows/ci.yml/badge.svg)](https://github.com/Keitark/nes-sdr/actions/workflows/ci.yml)
+
 **Use a Japanese Famicom as the display for an ESP32-S3 software-defined radio.**
 
 NES-SDR targets the existing [FC ROM Vomitter](https://github.com/Keitark/fc-rom-vomitter) Rev A-FC hardware and is being designed around one rule:
@@ -119,9 +121,9 @@ The current UI reserves the first 192 CHR tiles for the graph and the remaining 
      | || ||    | ||
    | | || || || | ||
    ||| ||||||||||||||
-    2400          2483
+    LOW   CENTER   HIGH
 
-        2.4 GHZ ISM BAND
+       FFT SPAN / RX BW
 
        ESP-SDR + FAMICOM
 ```
@@ -144,17 +146,25 @@ docs/
   live-refresh.md
   roadmap.md
   snapshot-workflow.md
+  first-hardware-test.md
+  esp-idf-component.md
 
 firmware/
+  CMakeLists.txt
   include/nes_sdr_frame.h
   include/nes_sdr_spc1.h
+  include/nes_sdr_live.h
   src/nes_sdr_frame.c
   src/nes_sdr_spc1.c
+  src/nes_sdr_live.c
 
 integration/
   fc-rom-vomitter/
     README.md
     0001-live-chr-refresh.patch
+  esp-sdr/
+    README.md
+    0001-expose-last-spectrum.patch
 
 nes/
   src/main.s
@@ -164,10 +174,13 @@ nes/
 tools/
   font5x7.py
   render_mock.py
+  render_preview.py
 
 tests/
   test_render_mock.py
+  test_renderer_parity.py
   test_spc1.c
+  test_live.c
 
 .github/workflows/
   ci.yml
@@ -209,7 +222,7 @@ N spectrum bytes (256..2048)
 4-byte CRC field
 ```
 
-The display code consumes the spectrum bytes, reduces them to 24 columns, and updates only the graph region of CHR.
+ESP-SDR supplies those bytes in natural FFT order (DC at bin 0). NES-SDR applies an FFT shift first so the display runs low frequency -> center/DC -> high frequency, then reduces the result to 24 columns and updates only the graph region of CHR.
 
 The next major integration step is to route the ESP-SDR S3 spectrum producer directly into this adapter on the same ESP32-S3.
 
