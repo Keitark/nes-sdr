@@ -1,0 +1,102 @@
+diff --git a/main/common/ring_capture.h b/main/common/ring_capture.h
+--- a/main/common/ring_capture.h
++++ b/main/common/ring_capture.h
+@@ -49,6 +49,7 @@ typedef struct {
+     unsigned units_per_frame;  /* SPEC: units merged into one output frame */
+     bool max_hold;             /* SPEC: per-bin max instead of mean power */
+     bool stats;                /* SPEC: insert SPS1 statistics frames (~4/s) */
++    bool local_only;           /* SPEC: keep encoded frame locally; do not queue USB output */
+     unsigned iq_dec;           /* IQ: decimation 64..1024 (power of two), two-stage FIR */
+     unsigned iq_bits;          /* IQ: 4, 8 or 16 bits per component */
+     unsigned iq_shift;         /* IQ: rounding right shift of the FIR output (10-bit sample * 32) */
+diff --git a/main/common/ring_capture.c b/main/common/ring_capture.c
+--- a/main/common/ring_capture.c
++++ b/main/common/ring_capture.c
+@@ -436,7 +436,11 @@ RING_HOT static void emit_chunk(void) {
+     memcpy(frame_out + len, &st.emit_crc, 4);
+     ring_result_t *r = st.res;
+-    if (txq_push(frame_out, len + 4)) {
++    if (st.cfg->local_only) {
++        st.last_ok = esp_timer_get_time();
++        r->frames++;
++        st.dropped = false;
++    } else if (txq_push(frame_out, len + 4)) {
+         st.last_ok = esp_timer_get_time();
+         r->frames++;
+         st.dropped = false;
+diff --git a/main/CMakeLists.txt b/main/CMakeLists.txt
+--- a/main/CMakeLists.txt
++++ b/main/CMakeLists.txt
+@@ -45,7 +45,8 @@ if(IDF_TARGET STREQUAL "esp32c2")
+ endif()
+ 
+ idf_component_register(SRCS "${receiver}" ${sources}
++    INCLUDE_DIRS "."
+     LDFRAGMENTS ${fragments}
+     PRIV_INCLUDE_DIRS "common" ${target_includes} "diagnostics"
+     REQUIRES ${dependencies})
+diff --git a/main/esp_sdr_local.h b/main/esp_sdr_local.h
+new file mode 100644
+--- /dev/null
++++ b/main/esp_sdr_local.h
+@@ -0,0 +1,17 @@
++#pragma once
++
++#include <stdbool.h>
++#include <stddef.h>
++#include <stdint.h>
++
++#include "sdkconfig.h"
++
++#if CONFIG_IDF_TARGET_ESP32S3
++/*
++ * Capture one bounded, local-only 256-bin spectrum frame.
++ *
++ * Wi-Fi/PHY initialization and transition to WIFI_MODE_NULL must already have
++ * been performed by the embedding application.
++ */
++bool esp_sdr_s3_local_spec(uint32_t frequency_mhz, uint32_t duration_ms,
++                           const uint8_t **frame, size_t *length);
++#endif
+diff --git a/main/targets/esp32s3/receiver.c b/main/targets/esp32s3/receiver.c
+--- a/main/targets/esp32s3/receiver.c
++++ b/main/targets/esp32s3/receiver.c
+@@ -22,6 +22,7 @@
+ #include "burst_serial.h"
++#include "esp_sdr_local.h"
+ #include "rx_tuning.h"
+ #include "ring_capture.h"
+@@ -226,6 +227,35 @@ static void ring_send_capture(const ring_result_t *r,unsigned rate) {
+     }
+ }
++
++bool esp_sdr_s3_local_spec(uint32_t mhz, uint32_t duration_ms,
++                           const uint8_t **frame, size_t *length) {
++    if (!frame || !length || !duration_ms || duration_ms > 1000u ||
++        mhz < S3_FREQ_MIN || mhz > S3_FREQ_MAX) return false;
++
++    frequency_mhz=mhz;
++    rx_ready=false;
++    prepare_rx();
++    ring_capture_init();
++
++    ring_config_t c={
++        .mode=RING_MODE_SPEC,
++        .rate=6,                 /* 16 MS/s */
++        .duration_ms=duration_ms,
++        .nfft=256,
++        .stride=2,
++        .units_per_frame=1,
++        .max_hold=false,
++        .stats=false,
++        .local_only=true,
++    };
++    ring_result_t result;
++    rx_filter_apply();
++    ring_capture_run(&c,&result);
++    rx_filter_restore();
++    if (result.status || !result.frames) return false;
++    return ring_capture_last_spec(frame,length);
++}
++
+ static bool ring_command(const char *line) {
