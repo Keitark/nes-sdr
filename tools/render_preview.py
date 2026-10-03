@@ -15,7 +15,7 @@ HEIGHT = 240
 RGB = (
     (12, 14, 18),       # background
     (232, 242, 232),    # plane 0
-    (246, 183, 72),     # plane 1 / future peak trace
+    (190, 48, 40),      # plane 1 / Famicom-red axis / future peak trace
     (255, 255, 255),    # overlap
 )
 
