@@ -29,7 +29,7 @@ void nes_sdr_reduce_bins_u8(const uint8_t *bins, size_t bin_count,
  */
 /* Update only the dynamic graph tiles; bytes after NES_SDR_GRAPH_BYTES are preserved. */
 void nes_sdr_render_graph(const uint8_t heights[NES_SDR_COLUMNS],
-                          uint8_t chr[NES_SDR_CHR_BYTES]);
+                          uint8_t graph[NES_SDR_GRAPH_BYTES]);
 
 /* Convenience helper for tests / blank CHR generation. */
 void nes_sdr_render_chr(const uint8_t heights[NES_SDR_COLUMNS],
