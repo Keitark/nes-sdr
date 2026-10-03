@@ -1,0 +1,59 @@
+diff --git a/main/common/ring_capture.h b/main/common/ring_capture.h
+--- a/main/common/ring_capture.h
++++ b/main/common/ring_capture.h
+@@ -4,6 +4,7 @@
+ 
+ #include <stdbool.h>
++#include <stddef.h>
+ #include <stdint.h>
+ #include "sdkconfig.h"
+ #include "spectrum_dc.h"
+@@ -86,6 +87,12 @@ void ring_capture_run(const ring_config_t *config, ring_result_t *result);
+ const uint32_t *ring_capture_bank(unsigned bank);
+ unsigned ring_capture_rate_hz(unsigned rate);
+ bool ring_capture_valid_nfft(unsigned n);
++
++/* Valid after a completed RING_MODE_SPEC run and until the next run.
++ * The returned pointer aliases ring_capture.c's internal frame buffer.
++ * Consume it only after ring_capture_run() has returned. */
++bool ring_capture_last_spec(const uint8_t **frame, size_t *length);
++
+ /* 0 Hz handling after the FFT: 0 = notch bin 0, 1 = slow DC tracker (default). */
+ #define ring_capture_dc_mode spectrum_dc_mode
+ #if CONFIG_IDF_TARGET_ESP32S3
+diff --git a/main/common/ring_capture.c b/main/common/ring_capture.c
+--- a/main/common/ring_capture.c
++++ b/main/common/ring_capture.c
+@@ -242,6 +242,7 @@ static float *accum = accum_buf[0];
+ static uint16_t bin_of[RING_SPEC_NFFT_MAX]; /* FFT output slot -> natural-order bin */
+ static uint8_t frame_out[sizeof(spec_header_t) + RING_SPEC_NFFT_MAX + 4];
++static size_t last_spec_len;
+ static unsigned spec_n, spec_log2;        /* FFT size of the current run */
+ 
+ static void log_tables_init(void);
+@@ -432,6 +433,7 @@ RING_HOT static void emit_chunk(void) {
+     size_t len = sizeof(spec_header_t) + spec_n;
+     memcpy(frame_out + len, &st.emit_crc, 4);
++    last_spec_len = len + 4;
+     ring_result_t *r = st.res;
+     if (txq_push(frame_out, len + 4)) {
+         st.last_ok = esp_timer_get_time();
+@@ -449,6 +451,15 @@ RING_HOT static void emit_chunk(void) {
+ #endif
+ }
+ 
++bool ring_capture_last_spec(const uint8_t **frame, size_t *length) {
++    if (!frame || !length || !last_spec_len) return false;
++    *frame = frame_out;
++    *length = last_spec_len;
++    return true;
++}
++
+ /* Retire a bank before RF reuses it. Once unpacking is complete the FFT owns
+  * its input copy, so it can finish after retirement. Defer frame closure until
+  * that FFT commits; never mix a partial transform into a later frame. */
+@@ -900,6 +911,7 @@ RING_HOT void ring_capture_run(const ring_config_t *cfg, ring_result_t *r) {
+     memset(r, 0, sizeof(*r));
+     memset(&st, 0, sizeof(st));
++    last_spec_len = 0;
+ #if !CONFIG_IDF_TARGET_ESP32S3
