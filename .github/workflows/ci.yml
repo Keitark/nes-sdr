@@ -74,3 +74,36 @@ jobs:
           git diff --check
           git diff --exit-code -- main/common/ring_capture.h >/dev/null && exit 1 || true
           test -f main/esp_sdr_local.h
+
+
+  combined-esp32-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Clone FC ROM Vomitter integration branch
+        run: |
+          git clone --quiet --branch nes-sdr-integration --single-branch \
+            https://github.com/Keitark/fc-rom-vomitter.git /tmp/fc-rom-vomitter
+      - name: Clone pinned ESP-SDR with submodules
+        run: |
+          git clone --quiet --recursive https://github.com/ESPARGOS/esp-sdr.git /tmp/esp-sdr
+          cd /tmp/esp-sdr
+          git checkout --quiet ac627b0b7cb1b31da6e41e08ee38e9ae9e21863e
+          git submodule update --init --recursive
+      - name: Apply embedded ESP-SDR transforms
+        run: |
+          python3 integration/esp-sdr/apply_patches.py /tmp/esp-sdr
+          git -C /tmp/esp-sdr diff --check
+      - name: Prepare temporary combined firmware tree
+        run: |
+          python3 integration/combined/prepare_combined.py \
+            --nes-sdr "$GITHUB_WORKSPACE" \
+            --fc-rom-vomitter /tmp/fc-rom-vomitter \
+            --esp-sdr /tmp/esp-sdr
+      - name: Install PlatformIO
+        run: pip install "platformio==6.1.18"
+      - name: Build combined ESP32-S3 firmware
+        run: pio run -d /tmp/fc-rom-vomitter/firmware -e esp32-s3
