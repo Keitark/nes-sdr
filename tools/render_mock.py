@@ -7,7 +7,7 @@ import argparse
 import math
 from pathlib import Path
 
-from font5x7 import BLANK_TILE, install_font, tile_for_char
+from font5x7 import AXIS_TILE, BLANK_TILE, TICK_TILE, install_font, tile_for_char
 
 COLUMNS = 24
 ROWS = 8
@@ -100,11 +100,18 @@ def render_nametable() -> bytes:
             nt[(9 + row) * 32 + 4 + col] = tile
             tile += 1
 
-    put_text(nt, 4, 18, "LOW")
-    put_text(nt, 13, 18, "CENTER")
-    put_text(nt, 24, 18, "HIGH")
-    put_text(nt, 8, 20, "FFT SPAN / RX BW")
-    put_text(nt, 8, 23, "ESP-SDR + FAMICOM")
+    # Static horizontal axis directly below the graph.
+    for col in range(COLUMNS):
+        nt[17 * 32 + 4 + col] = AXIS_TILE
+    nt[17 * 32 + 4] = TICK_TILE
+    nt[17 * 32 + 15] = TICK_TILE
+    nt[17 * 32 + 27] = TICK_TILE
+
+    put_text(nt, 4, 19, "LOW")
+    put_text(nt, 13, 19, "CENTER")
+    put_text(nt, 24, 19, "HIGH")
+    put_text(nt, 8, 21, "FFT SPAN / RX BW")
+    put_text(nt, 8, 24, "ESP-SDR + FAMICOM")
     return bytes(nt)
 
 
