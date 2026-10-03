@@ -38,6 +38,10 @@ typedef struct {
 bool nes_sdr_spc1_parse(const uint8_t *frame, size_t length,
                         nes_sdr_spc1_view_t *view);
 
+bool nes_sdr_spc1_to_graph(const uint8_t *frame, size_t length,
+                           uint8_t graph[NES_SDR_GRAPH_BYTES]);
+
+/* Convenience helper for callers that maintain a complete CHR image. */
 bool nes_sdr_spc1_to_chr(const uint8_t *frame, size_t length,
                          uint8_t chr[NES_SDR_CHR_BYTES]);
 
