@@ -228,6 +228,8 @@ ESP-SDR supplies those bytes in natural FFT order (DC at bin 0). NES-SDR applies
 
 The next major integration step is to route the ESP-SDR S3 spectrum producer directly into this adapter on the same ESP32-S3.
 
+The initial live target is **5 Hz (200 ms/frame)**. The working budget is roughly 50 ms for RF capture/FFT and the remainder for CHR render, SRAM write/readback verify, and ownership-transition margin.
+
 ## Development path
 
 ```text
@@ -243,7 +245,7 @@ CHR-only ROM Vomitter refresh
     ->
 real ESP-SDR spectrum producer
     ->
-1 Hz live RF display on hardware
+5 Hz live RF display on hardware
 ```
 
 See [docs/roadmap.md](docs/roadmap.md).
