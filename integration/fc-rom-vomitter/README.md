@@ -58,7 +58,7 @@ esp_err_t controller_refresh_chr(const uint8_t *data, size_t length);
 The controller should enforce:
 
 - a valid installed NROM image;
-- `length <= 3072` for the NES-SDR fast path;
+- `length == 3072` for the NES-SDR fast path;
 - the existing controller mutex;
 - existing LOAD/RUN safety rules;
 - CHR readback before returning to RUN.
@@ -71,4 +71,8 @@ The controller should enforce:
 4. Run repeated LOAD/RUN cycling on hardware.
 5. Only after that, connect the ESP-SDR spectrum producer.
 
-A reference patch against the current ROM Vomitter source is kept beside this document.
+The reference patch beside this document is the original CHR-only sketch.
+The integrated bench profile adds a controller lock across RF capture,
+manual `RVLA` arming, a ROM marker check, and synthetic/RF build profiles in
+the ROM Vomitter firmware. Use that implementation for Issue #1; the sketch
+alone does not meet its safety and integration criteria.

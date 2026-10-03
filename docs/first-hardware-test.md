@@ -49,10 +49,11 @@ Then repeat automatically.
 
 ## C. Synthetic CHR live refresh
 
-Apply the reference CHR-only refresh API from
-`integration/fc-rom-vomitter/`.
-
-Feed generated 3072-byte graph frames without RF capture.
+Use the opt-in ROM Vomitter `esp32-s3-nes-sdr-synthetic` profile. Its
+controller verifies exactly the first 3072 CHR bytes and preserves the static
+tiles. After the NES-SDR ROM is installed and the screen is visible, send the
+four raw ASCII bytes `RVLA` over USB to arm the test. The profile cycles
+generated graph frames without RF capture.
 
 Suggested sequence:
 
@@ -62,7 +63,6 @@ flat
  -> single peak center
  -> single peak right
  -> full scale
- -> synthetic two-peak spectrum
 ```
 
 Refresh initially at 1 Hz.

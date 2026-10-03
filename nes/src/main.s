@@ -124,6 +124,12 @@ ram_wait_code:
     jmp RAM_WAIT
 ram_wait_end:
 
+; Checked by the cartridge before the operator can arm live CHR refresh.
+; This identifies the intended display ROM; the operator still confirms
+; that RESET has parked the 2A03 in internal RAM before sending RVLA.
+nes_sdr_live_marker:
+    .byte "NES-SDR-LIVE-V1"
+
 .proc nmi
     rti
 .endproc

@@ -1,59 +1,177 @@
-diff --git a/main/common/ring_capture.h b/main/common/ring_capture.h
---- a/main/common/ring_capture.h
-+++ b/main/common/ring_capture.h
-@@ -4,6 +4,7 @@
- 
- #include <stdbool.h>
-+#include <stddef.h>
- #include <stdint.h>
- #include "sdkconfig.h"
- #include "spectrum_dc.h"
-@@ -86,6 +87,12 @@ void ring_capture_run(const ring_config_t *config, ring_result_t *result);
- const uint32_t *ring_capture_bank(unsigned bank);
- unsigned ring_capture_rate_hz(unsigned rate);
- bool ring_capture_valid_nfft(unsigned n);
-+
-+/* Valid after a completed RING_MODE_SPEC run and until the next run.
-+ * The returned pointer aliases ring_capture.c's internal frame buffer.
-+ * Consume it only after ring_capture_run() has returned. */
-+bool ring_capture_last_spec(const uint8_t **frame, size_t *length);
-+
- /* 0 Hz handling after the FFT: 0 = notch bin 0, 1 = slow DC tracker (default). */
- #define ring_capture_dc_mode spectrum_dc_mode
- #if CONFIG_IDF_TARGET_ESP32S3
 diff --git a/main/common/ring_capture.c b/main/common/ring_capture.c
+index 2f63379..cdf0866 100644
 --- a/main/common/ring_capture.c
 +++ b/main/common/ring_capture.c
-@@ -242,6 +242,7 @@ static float *accum = accum_buf[0];
+@@ -311,6 +311,7 @@ static float accum_buf[1][RING_SPEC_NFFT_MAX];
+ static float *accum = accum_buf[0];
  static uint16_t bin_of[RING_SPEC_NFFT_MAX]; /* FFT output slot -> natural-order bin */
  static uint8_t frame_out[sizeof(spec_header_t) + RING_SPEC_NFFT_MAX + 4];
 +static size_t last_spec_len;
  static unsigned spec_n, spec_log2;        /* FFT size of the current run */
  
  static void log_tables_init(void);
-@@ -432,6 +433,7 @@ RING_HOT static void emit_chunk(void) {
-     size_t len = sizeof(spec_header_t) + spec_n;
-     memcpy(frame_out + len, &st.emit_crc, 4);
-+    last_spec_len = len + 4;
-     ring_result_t *r = st.res;
-     if (txq_push(frame_out, len + 4)) {
-         st.last_ok = esp_timer_get_time();
-@@ -449,6 +451,15 @@ RING_HOT static void emit_chunk(void) {
- #endif
- }
+@@ -335,6 +336,13 @@ void ring_capture_init(void) {
+ 
+ bool ring_capture_valid_nfft(unsigned n) { return n <= RING_SPEC_NFFT_MAX && (n >= 256 && !(n & (n - 1))); }
  
 +bool ring_capture_last_spec(const uint8_t **frame, size_t *length) {
-+    if (!frame || !length || !last_spec_len) return false;
++    if (frame == NULL || length == NULL || last_spec_len == 0) return false;
 +    *frame = frame_out;
 +    *length = last_spec_len;
 +    return true;
 +}
 +
- /* Retire a bank before RF reuses it. Once unpacking is complete the FFT owns
-  * its input copy, so it can finish after retirement. Defer frame closure until
-  * that FFT commits; never mix a partial transform into a later frame. */
-@@ -900,6 +911,7 @@ RING_HOT void ring_capture_run(const ring_config_t *cfg, ring_result_t *r) {
+ /* Hann window and bit-reversal bin map for FFT size n; outside the timed run.
+  * Scaling is independent of n: IQ10 << 6 in, the int16 FFT divides by n. */
+ static void spec_setup(unsigned n) {
+@@ -580,7 +588,8 @@ RING_HOT static void emit_chunk(void) {
+     size_t len = sizeof(spec_header_t) + spec_n;
+     memcpy(frame_out + len, &st.emit_crc, 4);
+     ring_result_t *r = st.res;
+-    if (txq_push(frame_out, len + 4)) {
++    if (st.cfg->local_only || txq_push(frame_out, len + 4)) {
++        last_spec_len = len + 4;
+         st.last_ok = esp_timer_get_time();
+         r->frames++;
+         st.dropped = false;
+@@ -1003,7 +1012,8 @@ IRAM_ATTR static void c1_encode_step(void) {
+     ring_result_t *r = st.res;
+     uint32_t len = c1enc.len, crc = c1enc.crc;
+     for (unsigned i = 0; i < 4; i++) frame_out[len + i] = (uint8_t)(crc >> (8u * i));
+-    if (c1_txq_push(frame_out, len + 4)) {
++    if (st.cfg->local_only || c1_txq_push(frame_out, len + 4)) {
++        last_spec_len = len + 4;
+         r->frames++;
+         st.dropped = false;
+     } else {
+@@ -1375,6 +1385,7 @@ static inline bool bank_idle(bool dual, unsigned b) { (void)dual; return !st.wor
+ #endif
+ 
+ RING_HOT void ring_capture_run(const ring_config_t *cfg, ring_result_t *r) {
++    last_spec_len = 0;
      memset(r, 0, sizeof(*r));
      memset(&st, 0, sizeof(st));
-+    last_spec_len = 0;
  #if !CONFIG_IDF_TARGET_ESP32S3
+@@ -1556,7 +1567,7 @@ RING_HOT void ring_capture_run(const ring_config_t *cfg, ring_result_t *r) {
+                     stop = true;
+                     r->stopped_by_host = true;
+                 }
+-                if (!stop && !capture && ring_input_available()) {
++                if (!stop && !capture && !cfg->local_only && ring_input_available()) {
+                     stop = true;
+                     r->stopped_by_host = true;
+                 }
+diff --git a/main/common/ring_capture.h b/main/common/ring_capture.h
+index 98c93cb..2d88a4c 100644
+--- a/main/common/ring_capture.h
++++ b/main/common/ring_capture.h
+@@ -4,6 +4,7 @@
+ #pragma once
+ 
+ #include <stdbool.h>
++#include <stddef.h>
+ #include <stdint.h>
+ #include "sdkconfig.h"
+ #include "spectrum_dc.h"
+@@ -63,6 +64,7 @@ typedef struct {
+     unsigned units_per_frame;  /* SPEC: units merged into one output frame */
+     bool max_hold;             /* SPEC: per-bin max instead of mean power */
+     bool stats;                /* SPEC: insert SPS1 statistics frames (~4/s) */
++    bool local_only;           /* SPEC: retain latest SPC1 without serial output */
+     unsigned iq_dec;           /* IQ: decimation 64..1024 (power of two), two-stage FIR */
+     unsigned iq_bits;          /* IQ: 4, 8 or 16 bits per component */
+     unsigned iq_shift;         /* IQ: rounding right shift of the FIR output (10-bit sample * 32) */
+@@ -93,6 +95,8 @@ void ring_capture_run(const ring_config_t *config, ring_result_t *result);
+ const uint32_t *ring_capture_bank(unsigned bank);
+ unsigned ring_capture_rate_hz(unsigned rate);
+ bool ring_capture_valid_nfft(unsigned n);
++/* Valid only after a completed SPEC run. Buffer is replaced by the next run. */
++bool ring_capture_last_spec(const uint8_t **frame, size_t *length);
+ /* 0 Hz handling after the FFT: 0 = notch bin 0, 1 = slow DC tracker (default). */
+ #define ring_capture_dc_mode spectrum_dc_mode
+ #if CONFIG_IDF_TARGET_ESP32S3
+diff --git a/main/targets/esp32s3/receiver.c b/main/targets/esp32s3/receiver.c
+index c8893af..5d06063 100644
+--- a/main/targets/esp32s3/receiver.c
++++ b/main/targets/esp32s3/receiver.c
+@@ -21,6 +21,7 @@
+ #include "burst_serial.h"
+ #include "rx_tuning.h"
+ #include "ring_capture.h"
++#include "s3_local_spec.h"
+ 
+ /* Vendor S3 adctrig uses the 64 KiB aperture at 0x3fcd0000 (MAC_DUMP_USAGE=4).
+  * The continuous ring also uses the two banks below it. Keep all three, in
+@@ -385,6 +386,49 @@ static void handle_command(char *line) {
+         else reply("ERR command\n");
+ }
+ 
++bool s3_local_spec_init(void) {
++    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
++    if (esp_wifi_init(&cfg) != ESP_OK ||
++        esp_wifi_set_storage(WIFI_STORAGE_RAM) != ESP_OK ||
++        esp_wifi_set_mode(WIFI_MODE_NULL) != ESP_OK ||
++        esp_wifi_start() != ESP_OK ||
++        esp_wifi_set_ps(WIFI_PS_NONE) != ESP_OK ||
++        esp_wifi_set_promiscuous(true) != ESP_OK ||
++        esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE) != ESP_OK) {
++        return false;
++    }
++    prepare_rx();
++    ring_capture_init();
++    return true;
++}
++
++bool s3_capture_local_spec(unsigned duration_ms, unsigned rate, unsigned nfft,
++                           const uint8_t **frame, size_t *length) {
++    if (frame == NULL || length == NULL || duration_ms == 0 || duration_ms > 1000 ||
++        (rate != 0 && rate != 1 && rate != 6) || !ring_capture_valid_nfft(nfft)) {
++        return false;
++    }
++    *frame = NULL;
++    *length = 0;
++    ring_config_t config = {
++        .mode = RING_MODE_SPEC,
++        .rate = rate,
++        .duration_ms = duration_ms,
++        .nfft = nfft,
++        .stride = 2,
++        .units_per_frame = 1,
++        .local_only = true,
++    };
++    ring_result_t result;
++    prepare_rx();
++    rx_filter_apply();
++    ring_capture_run(&config, &result);
++    rx_filter_restore();
++    return result.status == RING_OK && result.frames > 0 &&
++           ring_capture_last_spec(frame, length);
++}
++
++#ifndef ESP_SDR_EMBEDDED
+ void app_main(void) {
+     esp_log_level_set("*",ESP_LOG_NONE);
+     esp_err_t e=nvs_flash_init();
+@@ -431,3 +475,4 @@ void app_main(void) {
+         lease_deadline=esp_timer_get_time()+5000000;
+     }
+ }
++#endif
+diff --git a/main/targets/esp32s3/s3_local_spec.h b/main/targets/esp32s3/s3_local_spec.h
+new file mode 100644
+index 0000000..fa59685
+--- /dev/null
++++ b/main/targets/esp32s3/s3_local_spec.h
+@@ -0,0 +1,12 @@
++#pragma once
++
++#include <stdbool.h>
++#include <stddef.h>
++#include <stdint.h>
++
++/* Embedded mode: caller initializes NVS and the default event loop first.
++ * Wi-Fi is placed in receive-only NULL mode, so an AP cannot run concurrently.
++ */
++bool s3_local_spec_init(void);
++bool s3_capture_local_spec(unsigned duration_ms, unsigned rate, unsigned nfft,
++                           const uint8_t **frame, size_t *length);

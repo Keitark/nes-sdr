@@ -17,18 +17,29 @@ spectrum into the static `frame_out` buffer in `main/common/ring_capture.c`.
 After `ring_capture_run()` returns, RF bank rotation has stopped and the last
 encoded frame can be consumed safely.
 
-So the proposed upstream-facing change is deliberately tiny:
+The integration patch now adds a local-output mode and target helper:
 
 ```c
 bool ring_capture_last_spec(const uint8_t **frame, size_t *length);
+bool s3_local_spec_init(void);
+bool s3_capture_local_spec(unsigned duration_ms, unsigned rate, unsigned nfft,
+                           const uint8_t **frame, size_t *length);
 ```
 
-The hot path only records the final frame length. There is:
+`local_only` retains the most recent complete SPC1 frame without queueing it
+to USB. The helper reuses `prepare_rx()`, the filter setup, and
+`ring_capture_run()`; it returns only after RF capture has stopped. There is:
 
 - no additional frame copy;
 - no callback from the timing-sensitive RF loop;
 - no CHR write while interrupts are disabled;
 - no SRAM-bus ownership change during RF capture.
+
+In embedded mode the ESP-SDR command-loop `app_main()` is omitted. The
+integrating firmware initializes NVS and the event loop, then calls
+`s3_local_spec_init()` to start Wi-Fi in receive-only NULL mode. Its SoftAP
+cannot operate at the same time. The original ESP-SDR serial behavior remains
+the default when embedded mode is not enabled.
 
 ## Intended 1 Hz cycle
 
@@ -85,27 +96,9 @@ Higher FFT sizes can be added later without changing the NES renderer.
 
 ## Receiver-side helper
 
-A future integration branch can expose one target-level helper around the
-currently static S3 receiver preparation code:
-
-```c
-bool s3_capture_local_spec(unsigned duration_ms,
-                           unsigned rate,
-                           unsigned nfft,
-                           const uint8_t **frame,
-                           size_t *length);
-```
-
-Internally it should reuse the exact same:
-
-- receiver preparation;
-- analog filter application;
-- `ring_capture_run()`;
-- filter restore;
-
-used by the existing `SPEC` command.
-
-Do not duplicate RF register setup in NES-SDR.
+The helper uses the same receiver preparation, analog-filter application,
+capture, and filter restoration as the existing `SPEC` command. NES-SDR does
+not duplicate RF register setup.
 
 ## Suggested first configuration
 
@@ -125,6 +118,7 @@ Once hardware works, tune the capture window and smoothing for appearance.
 
 ## Patch
 
-`0001-expose-last-spectrum.patch` documents the proposed small upstream
-change. It is kept here as an integration aid, not as a vendored copy of
-ESP-SDR.
+`0001-expose-last-spectrum.patch` applies to upstream commit
+`ac627b0b7cb1b31da6e41e08ee38e9ae9e21863e`. It is an integration aid,
+not a vendored copy of ESP-SDR. The combined firmware build also needs the
+upstream repository's pinned `esp-dsp` submodule.

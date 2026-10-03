@@ -1,4 +1,5 @@
 nes/build/
+tests/build/
 __pycache__/
 *.pyc
 .DS_Store

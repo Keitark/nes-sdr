@@ -37,6 +37,8 @@ jobs:
         run: make -C nes
       - name: Check ROM size
         run: test "$(stat -c %s nes/build/nes-sdr.nes)" -eq 40976
+      - name: Check live ROM marker
+        run: python3 -c 'from pathlib import Path; assert Path("nes/build/nes-sdr.nes").read_bytes().count(b"NES-SDR-LIVE-V1") == 1'
       - name: Render UI preview
         run: |
           python3 tools/render_preview.py \
