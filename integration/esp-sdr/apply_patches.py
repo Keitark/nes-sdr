@@ -97,6 +97,20 @@ def main() -> None:
         '    unsigned iq_dec;',
     )
     replace_once(
+        ring_h,
+        '#if !CONFIG_IDF_TARGET_ESP32S3\n'
+        '#define RING_SPEC_NFFT_MAX 256u\n'
+        '#else\n'
+        '#define RING_SPEC_NFFT_MAX 2048u         /* SPEC FFT sizes: 256, 512, 1024, 2048 */\n'
+        '\n#endif\n',
+        '#if !CONFIG_IDF_TARGET_ESP32S3 || defined(ESP_SDR_EMBEDDED)\n'
+        '/* NES-SDR uses only 256-point FFTs; save internal RAM for the ROM image. */\n'
+        '#define RING_SPEC_NFFT_MAX 256u\n'
+        '#else\n'
+        '#define RING_SPEC_NFFT_MAX 2048u         /* SPEC FFT sizes: 256, 512, 1024, 2048 */\n'
+        '\n#endif\n',
+    )
+    replace_once(
         ring_c,
         '    if (txq_push(frame_out, len + 4)) {\n'
         '        st.last_ok = esp_timer_get_time();\n'
@@ -112,6 +126,20 @@ def main() -> None:
         '        r->frames++;\n'
         '        st.dropped = false;\n'
         '    } else {\n',
+    )
+    replace_once(
+        ring_c,
+        '#if !CONFIG_IDF_TARGET_ESP32S3\n'
+        '#define TXQ_SIZE 2048u\n'
+        '#else\n'
+        '#define TXQ_SIZE 16384u /* 7 frames of 2048 bins, 56 of 256 */\n'
+        '#endif\n',
+        '#if !CONFIG_IDF_TARGET_ESP32S3 || defined(ESP_SDR_EMBEDDED)\n'
+        '/* The embedded backend keeps SPC1 local and does not stream USB frames. */\n'
+        '#define TXQ_SIZE 2048u\n'
+        '#else\n'
+        '#define TXQ_SIZE 16384u /* 7 frames of 2048 bins, 56 of 256 */\n'
+        '#endif\n',
     )
     replace_once(
         cmake,

@@ -1,6 +1,13 @@
 diff --git a/main/common/ring_capture.h b/main/common/ring_capture.h
 --- a/main/common/ring_capture.h
 +++ b/main/common/ring_capture.h
+@@ -34,7 +34,8 @@
+-#if !CONFIG_IDF_TARGET_ESP32S3
++#if !CONFIG_IDF_TARGET_ESP32S3 || defined(ESP_SDR_EMBEDDED)
++/* NES-SDR uses only 256-point FFTs; save internal RAM for the ROM image. */
+ #define RING_SPEC_NFFT_MAX 256u
+ #else
+ #define RING_SPEC_NFFT_MAX 2048u         /* SPEC FFT sizes: 256, 512, 1024, 2048 */
 @@ -49,6 +49,7 @@ typedef struct {
      unsigned units_per_frame;  /* SPEC: units merged into one output frame */
      bool max_hold;             /* SPEC: per-bin max instead of mean power */

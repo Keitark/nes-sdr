@@ -66,6 +66,15 @@ background task expects station Wi-Fi connectivity.
 
 ## Intended 5 Hz cycle
 
+For the temporary embedded build, the local-only SPC1 path uses a 2 KiB USB
+output queue instead of the standalone S3 command interface's 16 KiB queue.
+It also limits the embedded FFT workspace to the 256 points used by NES-SDR;
+the standalone ESP-SDR build retains its 2048-point option. This frees about
+37 KiB of internal RAM. The combined-build check requires the strong ESP-SDR
+backend symbols and at least 44 KiB of DRAM before the S3 RF ring aperture,
+leaving room for ROM Vomitter's 40 KiB image allocation. Link-time headroom
+does not establish that boot and RF capture succeed on the board.
+
 ```text
 prepare receiver
       |

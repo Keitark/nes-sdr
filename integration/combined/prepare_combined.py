@@ -88,6 +88,22 @@ def main() -> None:
     )
     project_cmake.write_text(cmake_text)
 
+    # PlatformIO does not honor the ESP-IDF component's WHOLE_ARCHIVE setting
+    # when linking its firmware. Force the adapter object into the final ELF
+    # so its strong RF symbols replace the weak unavailable defaults.
+    platformio = firmware / "platformio.ini"
+    pio_text = platformio.read_text()
+    pio_needle = "    -DNESCART_FC=1\n"
+    if pio_text.count(pio_needle) != 1:
+        raise RuntimeError("unexpected FC ROM Vomitter firmware/platformio.ini")
+    platformio.write_text(
+        pio_text.replace(
+            pio_needle,
+            pio_needle + "    -Wl,-u,nes_sdr_esp_sdr_backend_link_anchor\n",
+            1,
+        )
+    )
+
     defaults = firmware / "sdkconfig.defaults"
     text = defaults.read_text()
     if "NES-SDR / ESP-SDR combined-build profile" in text:
