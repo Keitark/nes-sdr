@@ -6,6 +6,7 @@ BUILD := build
 ROM := $(BUILD)/nes-sdr.nes
 OBJ := $(BUILD)/main.o
 CHR := $(BUILD)/spectrum.chr
+NAMETABLE := $(BUILD)/nametable.bin
 
 .PHONY: all clean
 
@@ -14,10 +15,10 @@ all: $(ROM)
 $(BUILD):
 	mkdir -p $(BUILD)
 
-$(CHR): | $(BUILD)
-	$(PYTHON) ../tools/render_mock.py --out $(CHR)
+$(CHR) $(NAMETABLE): | $(BUILD)
+	$(PYTHON) ../tools/render_mock.py --out $(CHR) --nametable $(NAMETABLE)
 
-$(OBJ): src/main.s $(CHR) | $(BUILD)
+$(OBJ): src/main.s $(CHR) $(NAMETABLE) | $(BUILD)
 	$(CA65) src/main.s -o $(OBJ)
 
 $(ROM): $(OBJ) nes.cfg
