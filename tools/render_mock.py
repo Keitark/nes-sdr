@@ -18,6 +18,23 @@ GRAPH_TILES = COLUMNS * ROWS
 GRAPH_BYTES = GRAPH_TILES * TILE_BYTES
 
 
+def reduce_bins_u8(bins: bytes | bytearray | list[int]) -> list[int]:
+    if not bins:
+        return [0] * COLUMNS
+
+    out: list[int] = []
+    count = len(bins)
+    for x in range(COLUMNS):
+        begin = (x * count) // COLUMNS
+        end = ((x + 1) * count) // COLUMNS
+        if end <= begin:
+            end = begin + 1
+        end = min(end, count)
+        peak = max(int(v) for v in bins[begin:end])
+        out.append((peak * HEIGHT + 127) // 255)
+    return out
+
+
 def synthetic_heights() -> list[int]:
     out: list[int] = []
     for x in range(COLUMNS):
