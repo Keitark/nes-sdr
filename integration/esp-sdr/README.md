@@ -66,6 +66,13 @@ background task expects station Wi-Fi connectivity.
 
 ## Intended 5 Hz cycle
 
+For the temporary embedded build, the local-only SPC1 path uses a 2 KiB USB
+output queue instead of the standalone S3 command interface's 16 KiB queue.
+This keeps static memory below the S3 RF ring aperture without weakening its
+linker guard. The combined-build check also requires the strong ESP-SDR backend
+symbols in the final ELF; a successful build with only NES-SDR's weak stub is
+not an RF-capable image.
+
 ```text
 prepare receiver
       |

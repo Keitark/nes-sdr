@@ -114,6 +114,20 @@ def main() -> None:
         '    } else {\n',
     )
     replace_once(
+        ring_c,
+        '#if !CONFIG_IDF_TARGET_ESP32S3\n'
+        '#define TXQ_SIZE 2048u\n'
+        '#else\n'
+        '#define TXQ_SIZE 16384u /* 7 frames of 2048 bins, 56 of 256 */\n'
+        '#endif\n',
+        '#if !CONFIG_IDF_TARGET_ESP32S3 || defined(ESP_SDR_EMBEDDED)\n'
+        '/* The embedded backend keeps SPC1 local and does not stream USB frames. */\n'
+        '#define TXQ_SIZE 2048u\n'
+        '#else\n'
+        '#define TXQ_SIZE 16384u /* 7 frames of 2048 bins, 56 of 256 */\n'
+        '#endif\n',
+    )
+    replace_once(
         cmake,
         'option(SAMPLE_RATE_PROBE "Build volatile hardware sample-rate diagnostics (never package)" OFF)\n',
         'option(SAMPLE_RATE_PROBE "Build volatile hardware sample-rate diagnostics (never package)" OFF)\n'
