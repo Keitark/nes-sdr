@@ -55,7 +55,7 @@ promiscuous RX setup
 SDR MODE
   no browser connection
   local spectrum capture
-  CHR refresh at ~5 Hz
+  CHR refresh at ~4 Hz
 ```
 
 Do not stop/restart the AP every second. The first PoC remains in SDR mode until
@@ -64,7 +64,7 @@ the cartridge ESP is reset or power-cycled.
 Cloud-pull mode should be disabled/refused before entering SDR mode because its
 background task expects station Wi-Fi connectivity.
 
-## Intended 5 Hz cycle
+## Intended 4 Hz cycle
 
 ```text
 prepare receiver
@@ -96,7 +96,7 @@ CHR write + verify
 ROM Vomitter RUN
       |
       v
-sleep until next 200 ms frame boundary
+sleep until next 250 ms frame boundary
 ```
 
 RF capture and Famicom SRAM access are therefore time-separated.
@@ -152,10 +152,10 @@ stride:            2
 units per frame:   1
 detector:          mean
 capture window:    ~50 ms
-refresh interval:  200 ms (5 Hz)
+refresh interval:  250 ms (4 Hz)
 ```
 
-Once hardware works, tune the capture window and smoothing for appearance. The 200 ms budget must include RF capture, CHR rendering, SRAM write, readback verification, and LOAD/RUN transition margin.
+Once hardware works, tune the capture window and smoothing for appearance. The 250 ms budget must include RF capture, CHR rendering, SRAM write, readback verification, and LOAD/RUN transition margin.
 
 ## Patches
 

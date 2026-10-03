@@ -56,10 +56,10 @@ Success criterion: a recorded spectrum fixture produces a deterministic graph im
 - [ ] expose one on-device spectrum frame without USB serialization
 - [ ] feed its bins directly to `nes_sdr_spc1_to_chr` or a lower-level bin adapter
 - [ ] invoke the ROM Vomitter CHR-only refresh operation
-- [ ] add a 5 Hz scheduler (200 ms/frame)
+- [ ] add a 4 Hz scheduler (250 ms/frame)
 - [ ] keep Wi-Fi / RF capture and SRAM ownership transitions mutually safe
 
-Success criterion: one ESP32-S3 performs RF capture, FFT, graph rendering, and CHR refresh without a PC in the data path, sustaining a 5 Hz target without violating SRAM ownership or verification invariants.
+Success criterion: one ESP32-S3 performs RF capture, FFT, graph rendering, and CHR refresh without a PC in the data path, sustaining a 4 Hz target without violating SRAM ownership or verification invariants.
 
 ## Stage 5 — real RF demo
 
@@ -77,7 +77,7 @@ Candidates that still preserve the no-mod hardware goal:
 
 - web UI for center frequency / bandwidth / gain;
 - ESP BOOT button for capture/pause;
-- automatic 5 Hz refresh;
+- automatic 4 Hz refresh;
 - peak-hold trace;
 - waterfall-style stepped history;
 - Wi-Fi channel markers;

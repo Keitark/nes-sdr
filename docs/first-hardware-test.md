@@ -65,7 +65,7 @@ flat
  -> synthetic two-peak spectrum
 ```
 
-Refresh initially at 5 Hz once single-step refresh is proven stable.
+Refresh initially at 4 Hz once single-step refresh is proven stable.
 
 Confirm the static font/UI never changes.
 
@@ -87,10 +87,10 @@ Run repeated refresh cycles before enabling Wi-Fi/RF capture.
 Suggested first stress target:
 
 ```text
-10,000 refreshes at 5 Hz-equivalent ownership cycling
+10,000 refreshes at 4 Hz-equivalent ownership cycling
 ```
 
-The test can run faster than 1 Hz if the SRAM path allows it; the purpose is
+The test can run faster than 4 Hz if the SRAM path allows it; the purpose is
 ownership repeatability.
 
 ## E. RF integration
@@ -103,9 +103,9 @@ Only after A-D pass:
 4. stop RF capture;
 5. render the latest SPC1 frame;
 6. refresh 3072 CHR bytes;
-7. repeat every 200 ms (5 Hz target).
+7. repeat every 250 ms (4 Hz target).
 
-Keep RF capture and SRAM LOAD phases separate for the first implementation. Log per-frame capture time, CHR write time, verify time, and total frame time; the total must stay below 200 ms with margin.
+Keep RF capture and SRAM LOAD phases separate for the first implementation. Log per-frame capture time, CHR write time, verify time, total frame time, and start-to-start period; the total must stay below 250 ms with margin.
 
 ## F. Self-noise experiment
 
