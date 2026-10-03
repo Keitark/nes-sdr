@@ -135,6 +135,12 @@ python3 tools/render_mock.py --out spectrum.chr
 
 This creates an 8 KiB CHR image using exactly the same tile layout expected by the Famicom ROM.
 
+## Zero-mod snapshot refresh
+
+After the first display works, the practical refresh mode is: press the ESP capture button, let ROM Vomitter safely isolate and rewrite SRAM, wait for READY, then press the Famicom RESET button. See [docs/snapshot-workflow.md](docs/snapshot-workflow.md).
+
+This keeps the released bus-isolation design intact and requires no cartridge rework.
+
 ## About live 1 Hz updates
 
 **Zero-mod live refresh is a research item, not something this project pretends already works.**
