@@ -32,11 +32,9 @@ void nes_sdr_reduce_bins_u8(const uint8_t *bins, size_t bin_count,
     }
 }
 
-void nes_sdr_render_chr(const uint8_t heights[NES_SDR_COLUMNS],
-                        uint8_t chr[NES_SDR_CHR_BYTES])
+void nes_sdr_render_graph(const uint8_t heights[NES_SDR_COLUMNS],
+                          uint8_t chr[NES_SDR_CHR_BYTES])
 {
-    memset(chr, 0, NES_SDR_CHR_BYTES);
-
     for (size_t tile_row = 0; tile_row < NES_SDR_GRAPH_TILE_ROWS; ++tile_row) {
         for (size_t x = 0; x < NES_SDR_COLUMNS; ++x) {
             const size_t tile = tile_row * NES_SDR_COLUMNS + x;
@@ -59,5 +57,11 @@ void nes_sdr_render_chr(const uint8_t heights[NES_SDR_COLUMNS],
         }
     }
 
-    /* Tile 248 and all following tiles remain blank by design. */
+}
+
+void nes_sdr_render_chr(const uint8_t heights[NES_SDR_COLUMNS],
+                        uint8_t chr[NES_SDR_CHR_BYTES])
+{
+    memset(chr, 0, NES_SDR_CHR_BYTES);
+    nes_sdr_render_graph(heights, chr);
 }
