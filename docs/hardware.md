@@ -1,46 +1,100 @@
 # Hardware integration
 
-NES-SDR initially targets the released FC ROM Vomitter Rev A-FC hardware unchanged.
+NES-SDR targets the released FC ROM Vomitter Rev A-FC hardware unchanged.
 
-## Relevant existing blocks
+## Existing blocks used
 
 - ESP32-S3-WROOM-1-N8
 - U13 PRG SRAM: CY62128, 128K x 8
 - U14 CHR SRAM: CY62128, 128K x 8
 - console-side 74LVC245 bus buffers
 - MCU-side 74LVC245 bus buffers
-- 74HC595 address generation for MCU SRAM access
+- 74HC595 MCU address generation
 - LOAD/RUN ownership logic
+- existing SRAM write/readback firmware path
 
-Only 32 KiB of PRG and 8 KiB of CHR are needed by the initial NROM target.
+No additional latch or bus transceiver is required by the current design.
 
-## No-mod operating sequence
+## Why shared LOAD_MODE is acceptable
 
-1. ESP32 keeps the cartridge in LOAD topology.
-2. ESP32 captures RF and computes a spectrum.
-3. NES-SDR renderer writes a complete 8 KiB CHR image.
-4. Existing ROM Vomitter SRAM code writes and verifies PRG + CHR.
-5. Existing logic exposes SRAM to the console.
-6. User presses the Famicom RESET button.
-7. The PPU displays the spectrum.
+Rev A-FC switches PRG and CHR ownership together.
 
-No electrical change is needed for this sequence.
+At first this looks unsuitable for live graphics because asserting LOAD removes PRG from the CPU.
 
-## Power and RF note
+NES-SDR avoids that problem in software: after initialization the 2A03 executes permanently from internal RAM.
 
-ESP-SDR uses the ESP32-S3 radio while the same module is physically inside the cartridge assembly. The cartridge shell, Famicom chassis, TV/RF wiring, USB cable, and nearby digital buses can all affect the observed spectrum.
+Therefore, during a live refresh:
 
-For early RF validation, compare:
+- loss of PRG access is harmless;
+- loss of CHR access is temporary and visible;
+- ESP32 gets exclusive SRAM ownership exactly as the board was designed to provide.
 
-- bare cartridge PCB;
-- cartridge in shell;
-- Famicom powered but PPU rendering disabled;
-- Famicom actively displaying.
+We keep the original electrical safety model instead of bypassing it.
 
-Treat visible self-noise as part of the experiment, not automatically as an SDR bug.
+## CHR memory layout
 
-## Live-update boundary
+Only the first 3 KiB changes every frame.
 
-Do not toggle LOAD_MODE while normal PRG code is executing.
+| CHR range | Purpose |
+|---|---|
+| `$0000-$0BFF` | 192 dynamic graph tiles |
+| `$0C00-$0C0F` | blank tile 192 |
+| `$0C10...` | 5x7 UI glyph tiles |
+| remainder | reserved |
 
-The released design intentionally uses LOAD_MODE to protect against bus contention, and switching it removes cartridge PRG from the CPU. NES-SDR will not weaken that safety invariant merely to obtain animation.
+The live writer should therefore refresh only `0x0000..0x0BFF`.
+
+## Proposed firmware transaction
+
+```c
+sram_bus_hold_isolated();
+write_chr_range(0, frame, 3072);
+verify_chr_range(0, frame, 3072);
+sram_bus_expose_to_console(mirroring);
+```
+
+The reference firmware patch lives under:
+
+```text
+integration/fc-rom-vomitter/
+```
+
+## RF/self-noise note
+
+ESP-SDR uses the same ESP32-S3 physically mounted in the cartridge.
+
+The following can affect the measured spectrum:
+
+- Famicom clock harmonics;
+- PPU activity;
+- SRAM/address switching;
+- ESP32 digital activity;
+- USB cable/common-mode radiation;
+- cartridge shell and shielding;
+- TV/RF modulator wiring.
+
+That is part of the experiment.
+
+For validation, compare at least:
+
+1. bare cartridge powered from USB;
+2. cartridge inserted, console powered;
+3. PPU rendering enabled;
+4. repeated LOAD/RUN CHR updates;
+5. different physical antenna positions.
+
+A visible line that follows console state may be self-noise rather than an external RF source.
+
+## Measurements to capture on first hardware run
+
+Recommended scope/logic-analyzer probes:
+
+- LOAD_MODE
+- RUN
+- PRG_WE_n
+- CHR_WE_n
+- CHR_OE_n
+- one PPU-side CHR data bit
+- optionally one MCU data bit
+
+The key check is that console-facing and MCU-facing drivers are never active against each other during ownership transitions.
