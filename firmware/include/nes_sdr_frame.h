@@ -23,6 +23,11 @@ enum {
 void nes_sdr_reduce_bins_u8(const uint8_t *bins, size_t bin_count,
                             uint8_t heights[NES_SDR_COLUMNS]);
 
+/* Reduce bins supplied in natural FFT order (DC at bin 0), applying fftshift
+ * so the frequency axis runs negative -> DC -> positive from left to right. */
+void nes_sdr_reduce_fft_u8(const uint8_t *bins, size_t bin_count,
+                           uint8_t heights[NES_SDR_COLUMNS]);
+
 /*
  * Render 31 bar heights (0..64 pixels) into a complete 8 KiB NES CHR image.
  * Tile 0..247 contain the graph, tile 248 is blank, remaining tiles are zero.
