@@ -33,12 +33,12 @@ void nes_sdr_reduce_bins_u8(const uint8_t *bins, size_t bin_count,
 }
 
 void nes_sdr_render_graph(const uint8_t heights[NES_SDR_COLUMNS],
-                          uint8_t chr[NES_SDR_CHR_BYTES])
+                          uint8_t graph[NES_SDR_GRAPH_BYTES])
 {
     for (size_t tile_row = 0; tile_row < NES_SDR_GRAPH_TILE_ROWS; ++tile_row) {
         for (size_t x = 0; x < NES_SDR_COLUMNS; ++x) {
             const size_t tile = tile_row * NES_SDR_COLUMNS + x;
-            uint8_t *dst = chr + tile * NES_SDR_TILE_BYTES;
+            uint8_t *dst = graph + tile * NES_SDR_TILE_BYTES;
             unsigned height = heights[x] > NES_SDR_GRAPH_HEIGHT
                                   ? NES_SDR_GRAPH_HEIGHT
                                   : heights[x];
@@ -56,7 +56,6 @@ void nes_sdr_render_graph(const uint8_t heights[NES_SDR_COLUMNS],
             }
         }
     }
-
 }
 
 void nes_sdr_render_chr(const uint8_t heights[NES_SDR_COLUMNS],
