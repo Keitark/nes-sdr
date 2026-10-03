@@ -71,7 +71,7 @@ bool nes_sdr_spc1_to_graph(const uint8_t *frame, size_t length,
         return false;
     }
 
-    nes_sdr_reduce_bins_u8(view.bins, view.bin_count, heights);
+    nes_sdr_reduce_fft_u8(view.bins, view.bin_count, heights);
     nes_sdr_render_graph(heights, graph);
     return true;
 }
