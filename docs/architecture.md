@@ -2,91 +2,167 @@
 
 ## Design rule: Rev A-FC stays unmodified
 
-The first NES-SDR target uses a stock FC ROM Vomitter Rev A-FC board. No lifted pins, bodge wires, extra latches, or rewired SRAM signals are required.
+NES-SDR targets a stock FC ROM Vomitter Rev A-FC board.
 
-That constraint changes the system split:
+No lifted pins, bodge wires, extra latches, or rewired SRAM signals are required for the primary path.
 
 ```text
 ESP32-S3                          Famicom
 ---------                         -------
-RF capture
-FFT
+RF capture                        PPU renders UI
+FFT                               2A03 parks in RAM
 bin reduction
 CHR tile generation
     |
-    | existing LOAD path
+    | existing LOAD/RUN ownership
     v
-PRG SRAM + CHR SRAM  ---------->  2A03 + PPU
-                                   |
-                                   v
-                                   TV
+PRG SRAM + CHR SRAM  ---------->  cartridge buses
 ```
 
-The ESP32 does all RF/DSP work. The Famicom only displays the resulting CHR image.
+The ESP32 does RF/DSP work. The Famicom supplies the PPU, video timing, palette, nametable RAM, and the display hardware.
 
-## What works with zero hardware changes
+## Existing ROM Vomitter behavior we reuse
 
-The released FC ROM Vomitter already supports:
+Rev A-FC already supports:
 
 1. isolating the console from PRG/CHR SRAM;
-2. writing PRG and CHR SRAM from the ESP32-S3;
-3. verifying SRAM contents;
-4. returning ownership to the console;
-5. running a mapper-0 image after the user presses RESET.
+2. giving the ESP32 address/data ownership;
+3. writing SRAM;
+4. readback verification;
+5. returning ownership to the console.
 
-NES-SDR therefore treats a spectrum image as ordinary CHR ROM data.
+The electrical ownership mechanism does not need to be redesigned.
 
-The first PoC cycle is:
+## Boot phase
 
-```text
-capture -> FFT -> render CHR -> load SRAM -> RESET -> display
+At boot, the normal NROM image runs from PRG SRAM.
+
+It initializes:
+
+- palette RAM;
+- the fixed nametable UI;
+- background rendering;
+- the initial CHR image.
+
+It then disables all expected interrupt sources and copies a tiny loop into internal 2A03 RAM at `$0200`.
+
+```asm
+$0200: JMP $0200
 ```
 
-This is a snapshot spectrum analyzer, not yet a live one.
+Execution jumps there permanently.
 
-## Why live 1 Hz update is not claimed yet
+## Steady-state phase
 
-Rev A-FC switches PRG and CHR ownership together with LOAD_MODE.
+Once parked in internal RAM, the 2A03 makes no cartridge PRG reads.
 
-During RUN:
+This removes the synchronization problem that a conventional game would have: the CPU is always safe for cartridge PRG to disappear.
 
-- Famicom owns PRG SRAM;
-- PPU owns CHR SRAM;
-- ESP32 address buffers to both SRAMs are disabled.
+The PPU keeps rendering independently.
 
-During LOAD:
+## Live frame refresh
 
-- ESP32 owns both SRAMs;
-- the Famicom loses PRG SRAM as well as CHR SRAM.
+The ESP32 can now perform:
 
-There is also no released-board runtime handshake signal from the Famicom CPU back to the ESP32.
+```text
+RUN
+ |
+ | 2A03 already parked in internal RAM
+ v
+assert LOAD
+ |
+ +--> console PRG buffers disabled
+ |      CPU unaffected
+ |
+ +--> console CHR buffers disabled
+        PPU may show a brief transient
+ |
+ v
+write dynamic CHR region
+ |
+ v
+verify dynamic CHR region
+ |
+ v
+return to RUN
+ |
+ v
+PPU reads the new pattern data
+```
 
-So a software-only live update cannot simply take CHR for a few milliseconds while the game keeps executing from PRG.
+No CPU-to-ESP handshake is required.
 
-## Experimental software-only directions
+## Dynamic versus static CHR
 
-These are research ideas, not requirements for the first working build.
+The screen is deliberately partitioned.
 
-### Internal-RAM rendezvous
+```text
+CHR $0000-$0BFF   3072 bytes   dynamic spectrum graph
+CHR $0C00-$0FFF   UI/font area in pattern table 0
+CHR $1000-$1FFF   reserved for future use
+```
 
-A 2A03 program can copy a tiny wait loop into internal RAM and execute there while cartridge PRG is unavailable. In principle, the ESP32 could switch to LOAD, rewrite CHR, and return to RUN.
+The graph uses:
 
-The hard problem is synchronization: the released board has no reliable signal telling the ESP32 that the CPU has entered the safe RAM loop.
+- 24 columns;
+- 8 tile rows;
+- 192 tiles;
+- 16 bytes per tile.
 
-Blind time-based takeover is therefore intentionally not enabled.
+Only the first 3072 bytes need to change each frame.
 
-### PPU-address-assisted writes
+The static font and UI graphics remain untouched.
 
-The PPU can present CHR addresses during rendering while the ESP32 controls CHR WE/OE and its data-side buffer. That suggests exotic write-while-addressed experiments.
+## Interrupt invariants
 
-The ESP32 cannot observe the full PPU address bus on the released board and the timing margin is small, so this is also experimental only.
+The RAM-parking technique depends on the CPU not fetching vectors from cartridge PRG while LOAD is active.
 
-## Practical roadmap
+The ROM therefore:
 
-1. Make snapshot mode excellent.
-2. Integrate ESP-SDR on-device FFT.
-3. Generate CHR frames on the ESP32.
-4. Measure end-to-end capture-to-display time.
-5. Only then investigate software-only live refresh.
+- executes `SEI`;
+- disables PPU NMI;
+- inhibits the APU frame IRQ;
+- does not use mapper IRQs;
+- performs no CPU-side animation after setup.
 
-If live refresh proves impossible without unsafe timing assumptions, the zero-mod target remains useful as a snapshot analyzer and any minimal hardware-assisted mode will be documented separately rather than silently becoming a requirement.
+A user-initiated console RESET during the short LOAD interval is outside the intended operating sequence because reset vector fetches need PRG to be visible.
+
+## Expected visual artifact
+
+The PPU cannot access CHR SRAM while the ESP32 owns it.
+
+So the image may briefly glitch during each refresh.
+
+That is a display-quality issue, not a bus-contention mechanism. Once RUN returns, the existing nametable, palette, scroll, and PPU state remain valid and normal pattern fetching resumes.
+
+Reducing the ownership window is therefore useful.
+
+## Performance target
+
+The initial target is 1 Hz.
+
+With the current ROM Vomitter bit-banged SRAM address path, updating and verifying 3072 bytes is expected to be visibly non-instantaneous but still practical for a proof of concept.
+
+Future optimizations can include:
+
+- faster address shifting;
+- writing only changed tiles;
+- optional verify policies after the basic mechanism is proven;
+- lower refresh rates when the spectrum is unchanged.
+
+None of these are required to establish the architecture.
+
+## Validation gate
+
+The live mechanism remains experimental until measured on hardware.
+
+Required evidence:
+
+1. stable internal-RAM CPU execution;
+2. no console/MCU driver overlap;
+3. scope capture of LOAD_MODE / RUN / CHR OE / CHR WE;
+4. repeated refresh cycling;
+5. PPU recovery after every cycle;
+6. operation while ESP-SDR and Wi-Fi/RF activity are active.
+
+The important property is that the scheme does not depend on phase alignment or timing luck between the ESP32 and 2A03.
