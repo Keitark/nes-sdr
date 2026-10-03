@@ -72,6 +72,6 @@ bool nes_sdr_spc1_to_chr(const uint8_t *frame, size_t length,
     }
 
     nes_sdr_reduce_bins_u8(view.bins, view.bin_count, heights);
-    nes_sdr_render_chr(heights, chr);
+    nes_sdr_render_graph(heights, chr);
     return true;
 }
