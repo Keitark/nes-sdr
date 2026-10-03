@@ -5,7 +5,7 @@ Reference upstream: `ESPARGOS/esp-sdr`, inspected at commit
 
 ## Goal
 
-NES-SDR only needs one recent on-device spectrum frame about once per second.
+NES-SDR only needs one recent on-device spectrum frame about five times per second.
 
 It does not need raw I/Q and it does not need to keep USB spectrum streaming active.
 
@@ -55,7 +55,7 @@ promiscuous RX setup
 SDR MODE
   no browser connection
   local spectrum capture
-  CHR refresh at ~1 Hz
+  CHR refresh at ~5 Hz
 ```
 
 Do not stop/restart the AP every second. The first PoC remains in SDR mode until
@@ -64,7 +64,7 @@ the cartridge ESP is reset or power-cycled.
 Cloud-pull mode should be disabled/refused before entering SDR mode because its
 background task expects station Wi-Fi connectivity.
 
-## Intended 1 Hz cycle
+## Intended 5 Hz cycle
 
 ```text
 prepare receiver
@@ -96,7 +96,7 @@ CHR write + verify
 ROM Vomitter RUN
       |
       v
-sleep until next ~1 Hz update
+sleep until next 200 ms frame boundary
 ```
 
 RF capture and Famicom SRAM access are therefore time-separated.
@@ -151,11 +151,11 @@ FFT:               256
 stride:            2
 units per frame:   1
 detector:          mean
-capture window:    50-100 ms
-refresh interval:  1 s
+capture window:    ~50 ms
+refresh interval:  200 ms (5 Hz)
 ```
 
-Once hardware works, tune the capture window and smoothing for appearance.
+Once hardware works, tune the capture window and smoothing for appearance. The 200 ms budget must include RF capture, CHR rendering, SRAM write, readback verification, and LOAD/RUN transition margin.
 
 ## Patches
 
