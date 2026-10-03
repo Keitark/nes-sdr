@@ -30,6 +30,40 @@ The hot path only records the final frame length. There is:
 - no CHR write while interrupts are disabled;
 - no SRAM-bus ownership change during RF capture.
 
+## RF ownership: SoftAP and SDR are separate phases
+
+The same ESP32-S3 Wi-Fi PHY is used by ROM Vomitter's SoftAP and by ESP-SDR.
+
+The first integrated PoC therefore treats them as **exclusive modes**:
+
+```text
+SETUP MODE
+  SoftAP / browser upload
+  install signed NES-SDR ROM
+  press Famicom RESET once
+  user chooses "Start SDR"
+          |
+          v
+HTTP response completes
+          |
+          v
+stop SoftAP
+WIFI_MODE_NULL
+promiscuous RX setup
+          |
+          v
+SDR MODE
+  no browser connection
+  local spectrum capture
+  CHR refresh at ~1 Hz
+```
+
+Do not stop/restart the AP every second. The first PoC remains in SDR mode until
+the cartridge ESP is reset or power-cycled.
+
+Cloud-pull mode should be disabled/refused before entering SDR mode because its
+background task expects station Wi-Fi connectivity.
+
 ## Intended 1 Hz cycle
 
 ```text
@@ -123,8 +157,16 @@ refresh interval:  1 s
 
 Once hardware works, tune the capture window and smoothing for appearance.
 
-## Patch
+## Patches
 
-`0001-expose-last-spectrum.patch` documents the proposed small upstream
-change. It is kept here as an integration aid, not as a vendored copy of
-ESP-SDR.
+Apply to the inspected ESP-SDR revision in order:
+
+1. `0001-expose-last-spectrum.patch`
+   - exposes the last completed SPC1 frame after a bounded run;
+2. `0002-local-only-s3-spectrum.patch`
+   - adds a local-only SPEC mode that does not queue USB frames;
+   - exposes `esp_sdr_s3_local_spec()` for a bounded 16 MS/s / 256-bin S3 capture.
+
+These patches are integration aids for the GPL-3.0-or-later ESP-SDR codebase;
+ESP-SDR source is intentionally not vendored into the FC ROM Vomitter MIT
+release tree.
