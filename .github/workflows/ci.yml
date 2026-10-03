@@ -59,3 +59,17 @@ jobs:
             nes/build/nes-sdr.nes
             nes/build/preview.png
           if-no-files-found: error
+
+
+  esp-sdr-patches:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check patches against pinned ESP-SDR revision
+        run: |
+          git clone --quiet https://github.com/ESPARGOS/esp-sdr.git /tmp/esp-sdr
+          cd /tmp/esp-sdr
+          git checkout --quiet ac627b0b7cb1b31da6e41e08ee38e9ae9e21863e
+          git apply --check "$GITHUB_WORKSPACE/integration/esp-sdr/0001-expose-last-spectrum.patch"
+          git apply "$GITHUB_WORKSPACE/integration/esp-sdr/0001-expose-last-spectrum.patch"
+          git apply --check "$GITHUB_WORKSPACE/integration/esp-sdr/0002-local-only-s3-spectrum.patch"
