@@ -19,7 +19,7 @@ extern "C" {
  *   4-byte CRC
  *
  * The bin code is a logarithmic power value. NES-SDR only needs the bytes;
- * the display renderer reduces them to 31 columns.
+ * the display renderer reduces them to 24 columns.
  */
 typedef struct {
     uint32_t frame_number;
