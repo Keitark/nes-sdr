@@ -70,6 +70,7 @@ jobs:
           git clone --quiet https://github.com/ESPARGOS/esp-sdr.git /tmp/esp-sdr
           cd /tmp/esp-sdr
           git checkout --quiet ac627b0b7cb1b31da6e41e08ee38e9ae9e21863e
-          git apply --check "$GITHUB_WORKSPACE/integration/esp-sdr/0001-expose-last-spectrum.patch"
-          git apply "$GITHUB_WORKSPACE/integration/esp-sdr/0001-expose-last-spectrum.patch"
-          git apply --check "$GITHUB_WORKSPACE/integration/esp-sdr/0002-local-only-s3-spectrum.patch"
+          python3 "$GITHUB_WORKSPACE/integration/esp-sdr/apply_patches.py" /tmp/esp-sdr
+          git diff --check
+          git diff --exit-code -- main/common/ring_capture.h >/dev/null && exit 1 || true
+          test -f main/esp_sdr_local.h
