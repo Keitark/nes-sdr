@@ -6,6 +6,8 @@ PPUSTATUS = $2002
 PPUADDR   = $2006
 PPUDATA   = $2007
 
+RAM_WAIT  = $0200
+
 .segment "HEADER"
 .byte $4e, $45, $53, $1a
 .byte 2                  ; 32 KiB PRG
@@ -13,6 +15,9 @@ PPUDATA   = $2007
 .byte $00                ; mapper 0, horizontal mirroring
 .byte $00
 .res 8, $00
+
+.segment "ZEROPAGE"
+nt_ptr: .res 2
 
 .segment "CODE"
 
@@ -27,11 +32,11 @@ PPUDATA   = $2007
     sei
     cld
     ldx #$40
-    stx $4017
+    stx $4017            ; inhibit APU frame IRQ
     ldx #$ff
     txs
     inx
-    stx PPUCTRL
+    stx PPUCTRL          ; rendering/NMI off while setting up
     stx PPUMASK
     stx $4010
 
@@ -52,52 +57,39 @@ PPUDATA   = $2007
     cpx #$20
     bne @palette
 
-    ; Fill nametable 0 with tile 248 (blank).
+    ; Copy 960-byte fixed UI nametable to $2000.
     bit PPUSTATUS
     lda #$20
     sta PPUADDR
     lda #$00
     sta PPUADDR
-    lda #248
-    ldx #$00
-    ldy #$04
-@fill_page:
-    sta PPUDATA
-    inx
-    bne @fill_page
-    dey
-    bne @fill_page
 
-    ; Place graph tiles 0..247 at rows 11..18, columns 0..30.
-    ; Nametable address = $2000 + 11*32 = $2160.
-    bit PPUSTATUS
-    lda #$21
-    sta PPUADDR
-    lda #$60
-    sta PPUADDR
+    lda #<ui_nametable
+    sta nt_ptr
+    lda #>ui_nametable
+    sta nt_ptr+1
 
-    ldx #$00              ; tile number
-    ldy #$08              ; eight tile rows
-@graph_row:
-    lda #$1f              ; 31 graph columns
-    sta $00
-@graph_col:
-    txa
+    ldx #$03             ; three complete 256-byte pages
+@nt_page:
+    ldy #$00
+@nt_page_byte:
+    lda (nt_ptr), y
     sta PPUDATA
-    inx
-    dec $00
-    bne @graph_col
-    lda #248              ; final column blank
+    iny
+    bne @nt_page_byte
+    inc nt_ptr+1
+    dex
+    bne @nt_page
+
+    ldy #$00             ; final 192 bytes
+@nt_tail:
+    lda (nt_ptr), y
     sta PPUDATA
-    dey
-    bne @graph_row
+    iny
+    cpy #$c0
+    bne @nt_tail
 
     ; Clear attributes ($23C0-$23FF) to palette 0.
-    bit PPUSTATUS
-    lda #$23
-    sta PPUADDR
-    lda #$c0
-    sta PPUADDR
     lda #$00
     ldx #$40
 @attr:
@@ -105,14 +97,32 @@ PPUDATA   = $2007
     dex
     bne @attr
 
-    lda #%10000000        ; enable NMI, pattern table 0
+    ; Background pattern table 0, NMI deliberately disabled.
+    lda #%00000000
     sta PPUCTRL
-    lda #%00001010        ; show background, including left edge
+    lda #%00001010       ; show background, including left edge
     sta PPUMASK
 
-@forever:
-    jmp @forever
+    ;
+    ; Critical zero-mod live-refresh trick:
+    ; copy an infinite loop into the 2A03's internal RAM and execute there.
+    ; From this point onward the CPU makes no cartridge PRG reads, so the
+    ; ESP32 may safely assert ROM Vomitter LOAD and take both SRAM buses.
+    ;
+    ldx #$00
+@copy_ram_wait:
+    lda ram_wait_code, x
+    sta RAM_WAIT, x
+    inx
+    cpx #(ram_wait_end - ram_wait_code)
+    bne @copy_ram_wait
+
+    jmp RAM_WAIT
 .endproc
+
+ram_wait_code:
+    jmp RAM_WAIT
+ram_wait_end:
 
 .proc nmi
     rti
@@ -128,6 +138,9 @@ palette:
 .byte $0f,$00,$00,$00,  $0f,$00,$00,$00
 .byte $0f,$16,$27,$38,  $0f,$00,$00,$00
 .byte $0f,$00,$00,$00,  $0f,$00,$00,$00
+
+ui_nametable:
+.incbin "build/nametable.bin"
 
 .segment "VECTORS"
 .word nmi
