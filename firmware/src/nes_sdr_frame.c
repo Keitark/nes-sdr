@@ -32,6 +32,38 @@ void nes_sdr_reduce_bins_u8(const uint8_t *bins, size_t bin_count,
     }
 }
 
+
+void nes_sdr_reduce_fft_u8(const uint8_t *bins, size_t bin_count,
+                           uint8_t heights[NES_SDR_COLUMNS])
+{
+    if (bins == NULL || bin_count == 0) {
+        memset(heights, 0, NES_SDR_COLUMNS);
+        return;
+    }
+
+    const size_t half = bin_count / 2;
+    for (size_t x = 0; x < NES_SDR_COLUMNS; ++x) {
+        size_t begin = (x * bin_count) / NES_SDR_COLUMNS;
+        size_t end = ((x + 1) * bin_count) / NES_SDR_COLUMNS;
+        if (end <= begin) {
+            end = begin + 1;
+        }
+        if (end > bin_count) {
+            end = bin_count;
+        }
+
+        uint8_t peak = 0;
+        for (size_t shifted = begin; shifted < end; ++shifted) {
+            const size_t natural = (shifted + half) % bin_count;
+            if (bins[natural] > peak) {
+                peak = bins[natural];
+            }
+        }
+
+        heights[x] = (uint8_t)(((unsigned)peak * NES_SDR_GRAPH_HEIGHT + 127u) / 255u);
+    }
+}
+
 void nes_sdr_render_graph(const uint8_t heights[NES_SDR_COLUMNS],
                           uint8_t graph[NES_SDR_GRAPH_BYTES])
 {
