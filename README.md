@@ -1,169 +1,171 @@
 # NES-SDR
 
-Turn a Japanese Famicom into a live RF spectrum display using the ESP32-S3 already present on the [FC ROM Vomitter](https://github.com/Keitark/fc-rom-vomitter).
+**Use a Japanese Famicom as the display for an ESP32-S3 software-defined radio.**
 
-The project combines three ideas:
+NES-SDR targets the existing [FC ROM Vomitter](https://github.com/Keitark/fc-rom-vomitter) Rev A-FC hardware and, for the first working version, requires **no cartridge hardware modification**.
 
-1. **ESP-SDR-style RF capture on the ESP32-S3** — on-chip FFTs reduce the RF stream to compact spectrum data.
-2. **CHR SRAM as a display framebuffer** — spectrum bars are converted directly into NES/Famicom pattern-table tiles.
-3. **A tiny NROM program on the Famicom** — the 2A03 and PPU only handle display setup and UI; they do not process raw I/Q.
-
-The first target is deliberately modest: **a 1 Hz spectrum display**. That is enough to prove the end-to-end path before attempting faster refresh or demodulation.
-
-> Status: early PoC. The software layout and CHR renderer are being built first. Live CHR SRAM ownership while the console is running still needs a safe bus-arbitration solution.
-
-## Why this architecture?
-
-The ESP32-S3 is already supported by ESP-SDR's continuous on-chip spectrum mode, so the NES does not need to ingest raw I/Q.
+The ESP32-S3 does the RF work. The Famicom does the gloriously inappropriate 1983 graphics work.
 
 ```text
 2.4 GHz RF
    |
    v
-ESP32-S3 RF receiver
+ESP32-S3 RF capture
    |
    v
 on-chip FFT
    |
    v
-256+ FFT bins
+bin reduction
    |
    v
-collapse / smooth / scale
+NES CHR tile renderer
    |
    v
-31 display columns, 0..64 pixels
+existing ROM Vomitter SRAM LOAD path
    |
    v
-CHR tile encoder
+Famicom PPU
    |
    v
-FC ROM Vomitter CHR SRAM
-   |
-   v
-Famicom PPU -> TV
+CRT / TV
 ```
 
-The Famicom sees ordinary CHR graphics. The spectrum can therefore be redrawn without asking the 6502 to perform FFTs, move large sample buffers, or even understand the RF data format.
+## First target: snapshot spectrum analyzer
 
-## Display format
+The initial target is intentionally simple and safe:
 
-The initial ROM reserves an 8-tile-high by 31-tile-wide region:
+1. capture RF on the ESP32-S3;
+2. compute a spectrum;
+3. convert it into NES CHR tiles;
+4. load the NROM PRG + generated CHR through ROM Vomitter's existing SRAM loader;
+5. expose the SRAM to the Famicom;
+6. press RESET;
+7. display the spectrum.
 
-- 31 spectrum columns
-- 64 vertical pixels per column
-- 248 unique CHR tiles
-- tile 248 is reserved as a blank background tile
-- tiles 249-255 are reserved for future UI glyphs
+No lifted pins, bodge wires, extra latches, or rewired SRAM signals.
 
-A complete graph image occupies **248 x 16 = 3968 bytes** of CHR pattern data.
+This gives us a complete RF-to-Famicom pipeline before trying any clever runtime tricks.
 
-The ESP32 renderer accepts 31 normalized bar heights and produces those 3968 bytes directly.
+## Why the ESP32-S3 is enough
+
+[ESP-SDR](https://github.com/ESPARGOS/esp-sdr) supports the ESP32-S3 with continuous on-chip FFT operation. NES-SDR does **not** need to push raw I/Q through the Famicom bus.
+
+Instead:
+
+```text
+256..2048 FFT bins
+        |
+        v
+31 display columns
+        |
+        v
+0..64 pixel bar height
+        |
+        v
+248 unique NES tiles
+```
+
+A complete graph occupies only 3968 bytes of CHR pattern data.
+
+The 6502 never performs an FFT and does not need to understand the SDR data format.
+
+## Current display format
+
+The NROM program reserves an 8-tile-high × 31-tile-wide graph:
+
+- 31 spectrum columns;
+- 64 vertical pixels;
+- 6-pixel-wide bars with a 2-pixel gap;
+- tiles 0-247: graph;
+- tile 248: blank;
+- tiles 249-255: reserved.
+
+The nametable is static. Changing the spectrum means generating different CHR bytes.
 
 ## Repository layout
 
 ```text
 docs/
-  architecture.md       end-to-end design
-  hardware.md           FC ROM Vomitter integration and live-update constraints
+  architecture.md       zero-mod architecture and live-update boundary
+  hardware.md           ROM Vomitter hardware integration
   roadmap.md            staged implementation plan
 
 firmware/
   include/nes_sdr_frame.h
-  src/nes_sdr_frame.c   FFT-bin collapse and CHR tile renderer
-  README.md             ESP-SDR integration notes
+  src/nes_sdr_frame.c   FFT-bin reduction + CHR renderer
+  README.md
 
 nes/
-  src/main.s            minimal NROM display program
-  nes.cfg               ca65/ld65 memory map
+  src/main.s            minimal mapper-0 spectrum display
+  nes.cfg
   Makefile
 
 tools/
-  render_mock.py        host-side preview/reference implementation
+  render_mock.py        reference/synthetic CHR generator
 
 tests/
-  test_render_mock.py   renderer behavior tests
+  test_render_mock.py
+
+.github/workflows/
+  ci.yml
 ```
 
 ## Build the Famicom ROM
 
-Install [cc65](https://cc65.github.io/cc65/) and run:
+Install cc65, then:
 
 ```sh
 make -C nes
 ```
 
-The result is:
+Output:
 
 ```text
 nes/build/nes-sdr.nes
 ```
 
-It is a mapper-0 / NROM image intended to be loaded by FC ROM Vomitter.
+The ROM is 32 KiB PRG + 8 KiB CHR, mapper 0 / NROM, ready for the normal FC ROM Vomitter upload path.
 
-## Render a mock spectrum
+## Generate a mock spectrum
 
 ```sh
-python tools/render_mock.py --out /tmp/nes-sdr.chr
+python3 tools/render_mock.py --out spectrum.chr
 ```
 
-This writes an 8 KiB CHR image containing a synthetic spectrum in the same layout used by the firmware-side renderer.
+This creates an 8 KiB CHR image using exactly the same tile layout expected by the Famicom ROM.
 
-## Hardware strategy
+## About live 1 Hz updates
 
-The existing FC ROM Vomitter already has:
+**Zero-mod live refresh is a research item, not something this project pretends already works.**
 
-- ESP32-S3-WROOM-1-N8
-- PRG SRAM
-- CHR SRAM
-- separate console-side and MCU-side bus buffers
-- LOAD/RUN ownership logic
+On the released ROM Vomitter board, LOAD/RUN ownership switches PRG and CHR together. While the ESP32 owns SRAM, the Famicom temporarily loses PRG. There is also no stock-board runtime handshake from the 2A03 back to the ESP32.
 
-That is almost exactly what NES-SDR needs.
+So the project will first make snapshot mode solid.
 
-The remaining issue is **live CHR updates**. In the current Rev A-FC design, LOAD/RUN ownership switches PRG and CHR together. During RUN the MCU-side CHR address buffers are disabled; during LOAD the Famicom loses PRG as well as CHR.
+Software-only ideas such as executing a rendezvous loop from the 2A03's internal RAM are documented in [docs/architecture.md](docs/architecture.md), but blind bus takeover is deliberately not used.
 
-The PoC therefore separates two milestones:
+If a safe zero-mod live scheme can be demonstrated, it becomes the next mode. If not, snapshot mode remains the baseline instead of quietly requiring a hardware bodge.
 
-### Snapshot mode
+## Development stages
 
-No board changes are required. Generate a CHR frame, load PRG+CHR SRAM through the existing ROM Vomitter path, then run the console. This validates the RF-to-NES graphics pipeline.
-
-### Live mode
-
-Keep PRG continuously available to the Famicom while allowing the ESP32 to temporarily own only the CHR SRAM. The exact implementation is documented in [docs/hardware.md](docs/hardware.md).
-
-The target refresh rate is initially only 1 Hz, so the design favors simple, safe arbitration over maximum bandwidth.
-
-## ESP-SDR relationship
-
-NES-SDR is designed to consume the same kind of on-device spectrum information produced by [ESPARGOS/esp-sdr](https://github.com/ESPARGOS/esp-sdr).
-
-ESP-SDR currently supports ESP32-S3 continuous on-chip FFT operation with selectable FFT sizes and 16/40/80 MS/s sample-rate modes. NES-SDR does not need to stream those FFT bins over USB: the intended integration is to feed them directly into the CHR renderer on the same ESP32-S3.
-
-No ESP-SDR source is vendored here yet. That keeps the first commits focused on the Famicom display pipeline and makes the integration boundary explicit.
-
-## Short-term goal
-
-A useful first demo is:
+See [docs/roadmap.md](docs/roadmap.md), but the short version is:
 
 ```text
-Power on Famicom
-      |
-      v
-NES-SDR ROM starts
-      |
-      v
-ESP32-S3 measures 2.4 GHz spectrum
-      |
-      v
-new graph generated once per second
-      |
-      v
-CHR SRAM updated
-      |
-      v
-spectrum moves on a CRT
+mock CHR
+   -> NROM display
+   -> host-tested C renderer
+   -> ESP-SDR FFT adapter
+   -> real RF snapshot
+   -> ROM Vomitter integration
+   -> investigate zero-mod live refresh
 ```
 
-That is the whole joke — and also a surprisingly sensible split of work between a 1983 console and a modern Wi-Fi SoC.
+## Credits
+
+NES-SDR builds on the ideas and hardware of:
+
+- [FC ROM Vomitter](https://github.com/Keitark/fc-rom-vomitter)
+- [ESP-SDR](https://github.com/ESPARGOS/esp-sdr)
+
+No ESP-SDR source code is vendored in the repository at this stage. The integration boundary is intentionally kept small while the Famicom display path is developed.
