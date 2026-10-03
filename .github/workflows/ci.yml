@@ -37,9 +37,18 @@ jobs:
         run: make -C nes
       - name: Check ROM size
         run: test "$(stat -c %s nes/build/nes-sdr.nes)" -eq 40976
+      - name: Render UI preview
+        run: |
+          python3 tools/render_preview.py \
+            --chr nes/build/spectrum.chr \
+            --nametable nes/build/nametable.bin \
+            --out nes/build/preview.png \
+            --scale 2
       - name: Upload NES ROM
         uses: actions/upload-artifact@v4
         with:
           name: nes-sdr-rom
-          path: nes/build/nes-sdr.nes
+          path: |
+            nes/build/nes-sdr.nes
+            nes/build/preview.png
           if-no-files-found: error
