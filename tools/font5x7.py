@@ -84,13 +84,13 @@ def install_font(chr_data: bytearray) -> None:
 
     # Static graph-axis primitives. These live outside the dynamic graph range.
     axis = bytearray(16)
-    axis[0] = 0xFF
+    axis[8] = 0xFF  # plane 1 -> palette color 2
     base = AXIS_TILE * 16
     chr_data[base:base + 16] = axis
 
     tick = bytearray(axis)
-    tick[1] = 0x18
-    tick[2] = 0x18
-    tick[3] = 0x18
+    tick[9] = 0x18
+    tick[10] = 0x18
+    tick[11] = 0x18
     base = TICK_TILE * 16
     chr_data[base:base + 16] = tick
