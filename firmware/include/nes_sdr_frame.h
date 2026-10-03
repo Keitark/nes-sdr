@@ -19,7 +19,7 @@ enum {
     NES_SDR_FONT_FIRST_TILE = 193
 };
 
-/* Collapse an arbitrary 8-bit spectrum into 31 display columns using max-hold. */
+/* Collapse an arbitrary 8-bit spectrum into 24 display columns using max-hold. */
 void nes_sdr_reduce_bins_u8(const uint8_t *bins, size_t bin_count,
                             uint8_t heights[NES_SDR_COLUMNS]);
 
