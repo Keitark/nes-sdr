@@ -13,6 +13,12 @@ jobs:
         run: python3 -m unittest discover -s tests -v
       - name: Compile C renderer
         run: cc -std=c11 -Wall -Wextra -Werror -Ifirmware/include -c firmware/src/nes_sdr_frame.c -o /tmp/nes_sdr_frame.o
+      - name: Build and run SPC1 adapter test
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -Ifirmware/include \
+            firmware/src/nes_sdr_frame.c firmware/src/nes_sdr_spc1.c tests/test_spc1.c \
+            -o /tmp/test_spc1
+          /tmp/test_spc1
 
   nes-rom:
     runs-on: ubuntu-latest
