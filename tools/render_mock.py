@@ -7,7 +7,7 @@ import argparse
 import math
 from pathlib import Path
 
-from font5x7 import BLANK_TILE, install_font
+from font5x7 import BLANK_TILE, install_font, tile_for_char
 
 COLUMNS = 24
 ROWS = 8
@@ -53,9 +53,37 @@ def render_chr(heights: list[int]) -> bytes:
     return bytes(chr_data)
 
 
+def put_text(nt: bytearray, x: int, y: int, text: str) -> None:
+    for i, ch in enumerate(text):
+        if 0 <= x + i < 32 and 0 <= y < 30:
+            nt[y * 32 + x + i] = tile_for_char(ch)
+
+
+def render_nametable() -> bytes:
+    nt = bytearray([BLANK_TILE] * 960)
+
+    put_text(nt, 12, 2, "NES-SDR")
+    put_text(nt, 10, 4, "RF SPECTRUM")
+    put_text(nt, 7, 6, "2.4 GHZ / ESP32-S3")
+
+    # Graph uses tiles 0..191 in row-major order, centered at x=4.
+    tile = 0
+    for row in range(8):
+        for col in range(COLUMNS):
+            nt[(9 + row) * 32 + 4 + col] = tile
+            tile += 1
+
+    put_text(nt, 4, 18, "2400")
+    put_text(nt, 24, 18, "2483")
+    put_text(nt, 9, 20, "2.4 GHZ ISM BAND")
+    put_text(nt, 8, 23, "ESP-SDR + FAMICOM")
+    return bytes(nt)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--nametable", type=Path)
     args = parser.parse_args()
 
     data = render_chr(synthetic_heights())
@@ -65,6 +93,12 @@ def main() -> None:
         f"wrote {len(data)} bytes to {args.out} "
         f"({GRAPH_BYTES} dynamic graph bytes, UI starts at tile {BLANK_TILE})"
     )
+
+    if args.nametable is not None:
+        nt = render_nametable()
+        args.nametable.parent.mkdir(parents=True, exist_ok=True)
+        args.nametable.write_bytes(nt)
+        print(f"wrote {len(nt)} bytes to {args.nametable}")
 
 
 if __name__ == "__main__":
