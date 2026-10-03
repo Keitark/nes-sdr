@@ -35,6 +35,16 @@ def reduce_bins_u8(bins: bytes | bytearray | list[int]) -> list[int]:
     return out
 
 
+def reduce_fft_u8(bins: bytes | bytearray | list[int]) -> list[int]:
+    if not bins:
+        return [0] * COLUMNS
+
+    count = len(bins)
+    half = count // 2
+    shifted = [int(bins[(i + half) % count]) for i in range(count)]
+    return reduce_bins_u8(shifted)
+
+
 def synthetic_heights() -> list[int]:
     out: list[int] = []
     for x in range(COLUMNS):
@@ -90,9 +100,10 @@ def render_nametable() -> bytes:
             nt[(9 + row) * 32 + 4 + col] = tile
             tile += 1
 
-    put_text(nt, 4, 18, "2400")
-    put_text(nt, 24, 18, "2483")
-    put_text(nt, 9, 20, "2.4 GHZ ISM BAND")
+    put_text(nt, 4, 18, "LOW")
+    put_text(nt, 13, 18, "CENTER")
+    put_text(nt, 24, 18, "HIGH")
+    put_text(nt, 8, 20, "FFT SPAN / RX BW")
     put_text(nt, 8, 23, "ESP-SDR + FAMICOM")
     return bytes(nt)
 
